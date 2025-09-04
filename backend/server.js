@@ -225,6 +225,10 @@ app.get('/', (req, res) => {
   res.json({ message: 'GATE Exam Simulator API - Node.js/Express' });
 });
 
+app.get('/api/', (req, res) => {
+  res.json({ message: 'Hello World from Node.js/Express' });
+});
+
 // Auth Routes
 app.post('/api/auth/register', [
   body('email').isEmail().withMessage('Valid email is required'),
