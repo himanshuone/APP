@@ -862,7 +862,7 @@ app.listen(PORT, '0.0.0.0', () => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
-  mongoose.connection.close(() => {
+  mongoose.connection.close().then(() => {
     console.log('MongoDB connection closed');
     process.exit(0);
   });
@@ -870,7 +870,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');
-  mongoose.connection.close(() => {
+  mongoose.connection.close().then(() => {
     console.log('MongoDB connection closed');
     process.exit(0);
   });
