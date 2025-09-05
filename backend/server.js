@@ -356,6 +356,44 @@ app.delete('/api/admin/questions/:questionId', authenticate, requireAdmin, async
   }
 });
 
+// Student Questions Route
+app.get('/api/questions', authenticate, async (req, res) => {
+  try {
+    const { skip = 0, limit = 100, subject } = req.query;
+    const query = subject ? { subject } : {};
+
+    const questions = await Question.find(query)
+      .skip(parseInt(skip))
+      .limit(parseInt(limit))
+      .select('-_id -__v');
+
+    // Add user relation for each question
+    const questionsWithRelation = questions.map(question => {
+      const questionObj = question.toObject();
+      
+      // Determine relationship to user
+      if (questionObj.created_by === req.user.id) {
+        questionObj.user_relation = 'own';
+      } else if (req.user.role === 'admin') {
+        questionObj.user_relation = 'admin';
+      } else {
+        questionObj.user_relation = 'public';
+      }
+      
+      // Add creator name (simplified)
+      questionObj.creator_name = questionObj.created_by === req.user.id ? req.user.full_name : 'Admin';
+      questionObj.shared_count = 0; // Placeholder
+      
+      return questionObj;
+    });
+
+    res.json(questionsWithRelation);
+  } catch (error) {
+    console.error('Get questions error:', error);
+    res.status(500).json({ detail: 'Failed to fetch questions' });
+  }
+});
+
 // File Upload Routes
 app.post('/api/admin/upload/csv', authenticate, requireAdmin, upload.single('file'), async (req, res) => {
   try {
@@ -1113,6 +1151,43 @@ app.get('/api/detailed-results/:sessionId', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get detailed results error:', error);
     res.status(500).json({ detail: 'Failed to fetch detailed results' });
+  }
+});
+
+// Exam History Route
+app.get('/api/exam-history', authenticate, async (req, res) => {
+  try {
+    const examResults = await ExamResult.find({ user_id: req.user.id })
+      .sort({ submitted_at: -1 })
+      .select('-_id -__v');
+
+    // Get exam config details for each result
+    const historyWithDetails = await Promise.all(
+      examResults.map(async (result) => {
+        const session = await ExamSession.findOne({ id: result.exam_session_id })
+          .select('exam_config_id -_id');
+        
+        const examConfig = session ? 
+          await ExamConfig.findOne({ id: session.exam_config_id })
+            .select('name description duration_minutes subjects -_id') :
+          null;
+
+        return {
+          ...result.toObject(),
+          exam_config_id: session?.exam_config_id || null,
+          exam_name: examConfig?.name || 'Unknown Exam',
+          exam_description: examConfig?.description || '',
+          exam_duration: examConfig?.duration_minutes || 180,
+          exam_subjects: examConfig?.subjects || [],
+          completed_at: result.submitted_at
+        };
+      })
+    );
+
+    res.json(historyWithDetails);
+  } catch (error) {
+    console.error('Get exam history error:', error);
+    res.status(500).json({ detail: 'Failed to fetch exam history' });
   }
 });
 

@@ -42,6 +42,7 @@ import {
   Sun,
   Share2,
   Users,
+  Activity,
   Eye,
   ChevronDown,
   ChevronUp,
@@ -383,11 +384,15 @@ const Dashboard = () => {
   const [exams, setExams] = useState([]);
   const [examHistory, setExamHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [adminStats, setAdminStats] = useState({ questions: 0, users: 0 });
 
   useEffect(() => {
     fetchExams();
     fetchExamHistory();
-  }, []);
+    if (user?.role === 'admin') {
+      fetchAdminStats();
+    }
+  }, [user]);
 
   const fetchExams = async () => {
     try {
@@ -415,6 +420,22 @@ const Dashboard = () => {
       navigate(`/exam/${response.data.id}`);
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to start exam');
+    }
+  };
+
+  const fetchAdminStats = async () => {
+    try {
+      const [questionsResponse, usersResponse] = await Promise.all([
+        axios.get(`${API}/admin/questions`),
+        axios.get(`${API}/admin/analytics/overview`)
+      ]);
+      
+      setAdminStats({
+        questions: questionsResponse.data.questions?.length || questionsResponse.data.length || 0,
+        users: usersResponse.data.total_users || 0
+      });
+    } catch (error) {
+      console.error('Failed to fetch admin stats:', error);
     }
   };
 
@@ -478,17 +499,6 @@ const Dashboard = () => {
                 <BookOpen className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Question Bank</span>
               </Button>
-              {user?.role === 'admin' && (
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate('/admin')}
-                  className="hidden sm:flex"
-                >
-                  <Settings className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Admin Panel</span>
-                </Button>
-              )}
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -528,19 +538,6 @@ const Dashboard = () => {
               <BookOpen className="h-4 w-4 mr-3" />
               Question Bank
             </Button>
-            {user?.role === 'admin' && (
-              <Button 
-                variant="ghost" 
-                className="w-full justify-start" 
-                onClick={() => {
-                  navigate('/admin');
-                  setMobileMenuOpen(false);
-                }}
-              >
-                <Settings className="h-4 w-4 mr-3" />
-                Admin Panel
-              </Button>
-            )}
             <hr className="border-gray-200 dark:border-gray-600" />
             <Button 
               variant="ghost" 
@@ -574,6 +571,139 @@ const Dashboard = () => {
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">GATE Exam Dashboard</h2>
           <p className="text-gray-600 dark:text-gray-400">Track your progress and continue your GATE preparation</p>
         </div>
+
+        {/* Admin Analytics Section */}
+        {user?.role === 'admin' && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-semibold text-slate-900 dark:text-white">Admin Overview</h3>
+              <Button 
+                variant="outline" 
+                onClick={() => navigate('/questions')}
+                className="flex items-center"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Manage Questions
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center">
+                    <FileText className="h-4 w-4 mr-2" />
+                    Total Questions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{adminStats.questions}</div>
+                  <p className="text-xs text-blue-100">In question bank</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-r from-green-500 to-green-600 text-white">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center">
+                    <BarChart className="h-4 w-4 mr-2" />
+                    Active Exams
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{exams.length}</div>
+                  <p className="text-xs text-green-100">Configured exams</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center">
+                    <Users className="h-4 w-4 mr-2" />
+                    Total Users
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{adminStats.users}</div>
+                  <p className="text-xs text-purple-100">Registered users</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-r from-orange-500 to-orange-600 text-white">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center">
+                    <Activity className="h-4 w-4 mr-2" />
+                    System Status
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">Active</div>
+                  <p className="text-xs text-orange-100">All systems operational</p>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Upload className="h-5 w-5 mr-2 text-blue-600" />
+                    Quick Actions
+                  </CardTitle>
+                  <CardDescription>Common administrative tasks</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button 
+                    className="w-full justify-start" 
+                    variant="outline"
+                    onClick={() => navigate('/questions')}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Questions (CSV)
+                  </Button>
+                  <Button 
+                    className="w-full justify-start" 
+                    variant="outline"
+                    onClick={() => navigate('/questions')}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create New Question
+                  </Button>
+                  <Button 
+                    className="w-full justify-start" 
+                    variant="outline"
+                    onClick={() => navigate('/questions')}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Question Bank
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <BarChart className="h-5 w-5 mr-2 text-green-600" />
+                    Recent Activity
+                  </CardTitle>
+                  <CardDescription>Latest system activities</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center text-sm">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                      <span className="text-slate-600 dark:text-slate-300">System running smoothly</span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                      <span className="text-slate-600 dark:text-slate-300">Database connected</span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full mr-3"></div>
+                      <span className="text-slate-600 dark:text-slate-300">{examHistory.length} exam sessions completed</span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <div className="w-2 h-2 bg-orange-500 rounded-full mr-3"></div>
+                      <span className="text-slate-600 dark:text-slate-300">Admin panel ready</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
 
         {/* Available Exams Section */}
         <div className="mb-12">
@@ -985,6 +1115,263 @@ const ExamCreationForm = ({ onExamCreated }) => {
   );
 };
 
+// Exam Creation Form Component
+const ExamCreationForm = ({ 
+  examFormData, 
+  examErrors, 
+  examCreationLoading, 
+  onFormChange, 
+  onSubjectChange, 
+  onQuestionTypeChange, 
+  onSubmit, 
+  availableSubjects = [],
+  onCancel 
+}) => {
+  return (
+    <form onSubmit={onSubmit} className="space-y-6 max-h-96 overflow-y-auto">
+      {/* Basic Information */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="exam-title">Exam Title *</Label>
+          <Input
+            id="exam-title"
+            name="title"
+            value={examFormData.title}
+            onChange={onFormChange}
+            placeholder="e.g., GATE CS Mock Test 1"
+            className={examErrors.title ? 'border-red-500' : ''}
+          />
+          {examErrors.title && <p className="text-red-500 text-sm">{examErrors.title}</p>}
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor="exam-duration">Duration (minutes) *</Label>
+          <Input
+            id="exam-duration"
+            name="duration"
+            type="number"
+            min="30"
+            max="300"
+            value={examFormData.duration}
+            onChange={onFormChange}
+            className={examErrors.duration ? 'border-red-500' : ''}
+          />
+          {examErrors.duration && <p className="text-red-500 text-sm">{examErrors.duration}</p>}
+        </div>
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="exam-description">Description *</Label>
+        <Textarea
+          id="exam-description"
+          name="description"
+          value={examFormData.description}
+          onChange={onFormChange}
+          placeholder="Describe the exam content and objectives..."
+          rows={3}
+          className={examErrors.description ? 'border-red-500' : ''}
+        />
+        {examErrors.description && <p className="text-red-500 text-sm">{examErrors.description}</p>}
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="exam-total-questions">Total Questions *</Label>
+          <Input
+            id="exam-total-questions"
+            name="total_questions"
+            type="number"
+            min="1"
+            max="200"
+            value={examFormData.total_questions}
+            onChange={onFormChange}
+            className={examErrors.total_questions ? 'border-red-500' : ''}
+          />
+          {examErrors.total_questions && <p className="text-red-500 text-sm">{examErrors.total_questions}</p>}
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor="exam-difficulty">Difficulty Level</Label>
+          <Select name="difficulty_level" value={examFormData.difficulty_level} onValueChange={(value) => {
+            onFormChange({ target: { name: 'difficulty_level', value } });
+          }}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select difficulty" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="easy">Easy</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="hard">Hard</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      
+      {/* Subjects */}
+      <div className="space-y-3">
+        <Label>Subjects *</Label>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-32 overflow-y-auto">
+          {availableSubjects.map((subject) => (
+            <div key={subject} className="flex items-center space-x-2">
+              <Checkbox
+                id={`exam-subject-${subject}`}
+                checked={examFormData.subjects.includes(subject)}
+                onCheckedChange={() => onSubjectChange(subject)}
+              />
+              <Label 
+                htmlFor={`exam-subject-${subject}`} 
+                className="text-sm font-normal cursor-pointer"
+              >
+                {subject}
+              </Label>
+            </div>
+          ))}
+        </div>
+        {examErrors.subjects && <p className="text-red-500 text-sm">{examErrors.subjects}</p>}
+      </div>
+      
+      {/* Question Types */}
+      <div className="space-y-3">
+        <Label>Question Types *</Label>
+        <div className="flex gap-4">
+          {['MCQ', 'MSQ', 'NAT'].map((type) => (
+            <div key={type} className="flex items-center space-x-2">
+              <Checkbox
+                id={`exam-type-${type}`}
+                checked={examFormData.question_types.includes(type)}
+                onCheckedChange={() => onQuestionTypeChange(type)}
+              />
+              <Label htmlFor={`exam-type-${type}`} className="text-sm font-normal cursor-pointer">
+                {type}
+              </Label>
+            </div>
+          ))}
+        </div>
+        {examErrors.question_types && <p className="text-red-500 text-sm">{examErrors.question_types}</p>}
+      </div>
+      
+      {/* Marking Scheme */}
+      <div className="space-y-4">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="exam-negative-marking"
+            name="negative_marking"
+            checked={examFormData.negative_marking}
+            onCheckedChange={(checked) => {
+              onFormChange({ target: { name: 'negative_marking', type: 'checkbox', checked } });
+            }}
+          />
+          <Label htmlFor="exam-negative-marking">Enable Negative Marking</Label>
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+          <div className="space-y-1">
+            <Label>MCQ Marks</Label>
+            <Input
+              type="number"
+              name="mcq_marks"
+              value={examFormData.mcq_marks}
+              onChange={onFormChange}
+              min="0"
+              step="0.25"
+              className="h-8"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>MCQ Negative</Label>
+            <Input
+              type="number"
+              name="mcq_negative"
+              value={examFormData.mcq_negative}
+              onChange={onFormChange}
+              min="0"
+              step="0.01"
+              className="h-8"
+              disabled={!examFormData.negative_marking}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>MSQ Marks</Label>
+            <Input
+              type="number"
+              name="msq_marks"
+              value={examFormData.msq_marks}
+              onChange={onFormChange}
+              min="0"
+              step="0.25"
+              className="h-8"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>MSQ Negative</Label>
+            <Input
+              type="number"
+              name="msq_negative"
+              value={examFormData.msq_negative}
+              onChange={onFormChange}
+              min="0"
+              step="0.01"
+              className="h-8"
+              disabled={!examFormData.negative_marking}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>NAT Marks</Label>
+            <Input
+              type="number"
+              name="nat_marks"
+              value={examFormData.nat_marks}
+              onChange={onFormChange}
+              min="0"
+              step="0.25"
+              className="h-8"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>NAT Negative</Label>
+            <Input
+              type="number"
+              name="nat_negative"
+              value={examFormData.nat_negative}
+              onChange={onFormChange}
+              min="0"
+              step="0.01"
+              className="h-8"
+              disabled={!examFormData.negative_marking}
+            />
+          </div>
+        </div>
+      </div>
+      
+      {/* Submit Buttons */}
+      <div className="flex justify-between items-center pt-6 border-t">
+        <div className="text-sm text-slate-600">
+          Selected: {examFormData.subjects.length} subject{examFormData.subjects.length !== 1 ? 's' : ''}
+          , {examFormData.question_types.length} type{examFormData.question_types.length !== 1 ? 's' : ''}
+        </div>
+        <div className="flex space-x-2">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={examCreationLoading}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={examCreationLoading}>
+            {examCreationLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Creating...
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Exam
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </form>
+  );
+};
+
 // Student Question Bank Component
 const StudentQuestionBank = () => {
   const { user, logout } = useAuth();
@@ -997,10 +1384,56 @@ const StudentQuestionBank = () => {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [shareEmails, setShareEmails] = useState('');
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvPreview, setCsvPreview] = useState(null);
+  const [showCsvPreview, setShowCsvPreview] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  const [previewQuestions, setPreviewQuestions] = useState([]);
+  const [selectedQuestionToDelete, setSelectedQuestionToDelete] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('all');
+  const [selectedType, setSelectedType] = useState('all');
+  const [showCreateExamDialog, setShowCreateExamDialog] = useState(false);
+  const [examFormData, setExamFormData] = useState({
+    title: '',
+    description: '',
+    duration: 180,
+    total_questions: 50,
+    subjects: [],
+    question_types: ['MCQ', 'MSQ', 'NAT'],
+    difficulty_level: 'medium',
+    negative_marking: true,
+    mcq_marks: 1,
+    mcq_negative: 0.33,
+    msq_marks: 2,
+    msq_negative: 0,
+    nat_marks: 2,
+    nat_negative: 0
+  });
+  const [examErrors, setExamErrors] = useState({});
+  const [examCreationLoading, setExamCreationLoading] = useState(false);
+  const [exams, setExams] = useState([]);
+  const [examsLoading, setExamsLoading] = useState(false);
 
   useEffect(() => {
     fetchQuestions();
+    fetchExams();
   }, []);
+
+  const fetchExams = async () => {
+    setExamsLoading(true);
+    try {
+      const response = await axios.get(`${API}/exams`);
+      setExams(response.data);
+    } catch (error) {
+      toast.error('Failed to fetch exams');
+    } finally {
+      setExamsLoading(false);
+    }
+  };
 
   const fetchQuestions = async () => {
     setLoading(true);
@@ -1047,17 +1480,223 @@ const StudentQuestionBank = () => {
     }
   };
 
+  const handleFileUpload = async (file, type) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    setUploadLoading(true);
+    try {
+      const response = await axios.post(`${API}/admin/upload/${type}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      toast.success(response.data.message);
+      if (type === 'csv') {
+        fetchQuestions();
+        setCsvPreview(null);
+        setShowCsvPreview(false);
+        setCsvFile(null);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || `Failed to upload ${type.toUpperCase()}`);
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  const handlePreviewCsv = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    setUploadLoading(true);
+    try {
+      const response = await axios.post(`${API}/admin/preview-csv`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      setCsvPreview(response.data);
+      setShowCsvPreview(true);
+      toast.success(`Preview loaded: ${response.data.showing_rows} of ${response.data.total_rows} rows`);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to preview CSV');
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  const handlePreviewAll = () => {
+    const myQuestions = getQuestionsByType('my-questions');
+    setPreviewQuestions(myQuestions);
+    setShowPreviewDialog(true);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedSubject('all');
+    setSelectedType('all');
+  };
+
+  const handleExamFormChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setExamFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : 
+             type === 'number' ? parseFloat(value) || 0 : 
+             value
+    }));
+    
+    // Clear error for this field
+    if (examErrors[name]) {
+      setExamErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const handleExamSubjectChange = (subject) => {
+    setExamFormData(prev => ({
+      ...prev,
+      subjects: prev.subjects.includes(subject)
+        ? prev.subjects.filter(s => s !== subject)
+        : [...prev.subjects, subject]
+    }));
+  };
+
+  const handleExamQuestionTypeChange = (type) => {
+    setExamFormData(prev => ({
+      ...prev,
+      question_types: prev.question_types.includes(type)
+        ? prev.question_types.filter(t => t !== type)
+        : [...prev.question_types, type]
+    }));
+  };
+
+  const validateExamForm = () => {
+    const errors = {};
+    
+    if (!examFormData.title.trim()) {
+      errors.title = 'Title is required';
+    }
+    
+    if (!examFormData.description.trim()) {
+      errors.description = 'Description is required';
+    }
+    
+    if (examFormData.duration < 30) {
+      errors.duration = 'Duration must be at least 30 minutes';
+    }
+    
+    if (examFormData.total_questions < 1) {
+      errors.total_questions = 'Must have at least 1 question';
+    }
+    
+    if (examFormData.subjects.length === 0) {
+      errors.subjects = 'At least one subject must be selected';
+    }
+    
+    if (examFormData.question_types.length === 0) {
+      errors.question_types = 'At least one question type must be selected';
+    }
+    
+    setExamErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleCreateExam = async (e) => {
+    e.preventDefault();
+    
+    if (!validateExamForm()) {
+      toast.error('Please fix the errors in the form');
+      return;
+    }
+    
+    setExamCreationLoading(true);
+    try {
+      const response = await axios.post(`${API}/exams`, examFormData);
+      toast.success('Exam created successfully!');
+      setShowCreateExamDialog(false);
+      fetchExams();
+      
+      // Reset form
+      setExamFormData({
+        title: '',
+        description: '',
+        duration: 180,
+        total_questions: 50,
+        subjects: [],
+        question_types: ['MCQ', 'MSQ', 'NAT'],
+        difficulty_level: 'medium',
+        negative_marking: true,
+        mcq_marks: 1,
+        mcq_negative: 0.33,
+        msq_marks: 2,
+        msq_negative: 0,
+        nat_marks: 2,
+        nat_negative: 0
+      });
+      setExamErrors({});
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to create exam');
+    } finally {
+      setExamCreationLoading(false);
+    }
+  };
+
+  const handleDeleteQuestion = async (questionId) => {
+    setDeleteLoading(true);
+    try {
+      await axios.delete(`${API}/questions/${questionId}`);
+      toast.success('Question deleted successfully!');
+      fetchQuestions();
+      setShowDeleteDialog(false);
+      setSelectedQuestionToDelete(null);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete question');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const getQuestionsByType = (type) => {
+    let filteredQuestions;
+    
     switch (type) {
       case 'my-questions':
-        return questions.filter(q => q.user_relation === 'own');
+        filteredQuestions = questions.filter(q => q.user_relation === 'own');
+        break;
       case 'shared-with-me':
-        return questions.filter(q => q.user_relation === 'shared');
+        filteredQuestions = questions.filter(q => q.user_relation === 'shared');
+        break;
       case 'all-questions':
-        return questions;
+        filteredQuestions = questions;
+        break;
       default:
-        return [];
+        filteredQuestions = [];
     }
+    
+    // Apply search and filters only for all-questions tab
+    if (type === 'all-questions') {
+      // Apply search query
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        filteredQuestions = filteredQuestions.filter(q => 
+          q.question_text.toLowerCase().includes(query) ||
+          q.subject.toLowerCase().includes(query) ||
+          q.topic.toLowerCase().includes(query) ||
+          (q.explanation && q.explanation.toLowerCase().includes(query))
+        );
+      }
+      
+      // Apply subject filter
+      if (selectedSubject && selectedSubject !== 'all') {
+        filteredQuestions = filteredQuestions.filter(q => q.subject === selectedSubject);
+      }
+      
+      // Apply type filter
+      if (selectedType && selectedType !== 'all') {
+        filteredQuestions = filteredQuestions.filter(q => q.question_type === selectedType);
+      }
+    }
+    
+    return filteredQuestions;
   };
 
   const getQuestionBadgeColor = (question) => {
@@ -1167,55 +1806,766 @@ const StudentQuestionBank = () => {
           </div>
           
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className={`grid w-full ${user?.role === 'admin' ? 'grid-cols-6' : 'grid-cols-4'}`}>
               <TabsTrigger value="my-questions">My Questions</TabsTrigger>
               <TabsTrigger value="shared-with-me">Shared with Me</TabsTrigger>
               <TabsTrigger value="all-questions">All Questions</TabsTrigger>
+              <TabsTrigger value="my-exams">My Exams</TabsTrigger>
+              {user?.role === 'admin' && (
+                <>
+                  <TabsTrigger value="upload-csv">Upload CSV</TabsTrigger>
+                  <TabsTrigger value="manage">Manage</TabsTrigger>
+                </>
+              )}
             </TabsList>
 
             {/* My Questions Tab */}
             <TabsContent value="my-questions" className="mt-6">
-              <QuestionsList 
-                questions={getQuestionsByType('my-questions')} 
-                loading={loading}
-                onShare={(question) => {
-                  setSelectedQuestion(question);
-                  setShowShareDialog(true);
-                }}
-                showShareButton={true}
-                getQuestionBadgeColor={getQuestionBadgeColor}
-                getQuestionLabel={getQuestionLabel}
-              />
+              <div className="space-y-6">
+                {/* Personal Stats Header */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 border-l-4 border-l-blue-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <FileText className="h-8 w-8 text-blue-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-blue-800 dark:text-blue-200">My Questions</p>
+                          <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{getQuestionsByType('my-questions').length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900 dark:to-green-800 border-l-4 border-l-green-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <Share2 className="h-8 w-8 text-green-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-green-800 dark:text-green-200">Shared</p>
+                          <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                            {getQuestionsByType('my-questions').filter(q => q.shared_count > 0).length}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900 dark:to-purple-800 border-l-4 border-l-purple-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <BookOpen className="h-8 w-8 text-purple-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-purple-800 dark:text-purple-200">Subjects</p>
+                          <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
+                            {[...new Set(getQuestionsByType('my-questions').map(q => q.subject))].length}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900 dark:to-orange-800 border-l-4 border-l-orange-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <Clock className="h-8 w-8 text-orange-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-orange-800 dark:text-orange-200">This Week</p>
+                          <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">0</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Enhanced Questions List with Action Buttons */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <CardTitle className="text-green-700 dark:text-green-300">📝 Questions I Created</CardTitle>
+                        <CardDescription>
+                          Manage, share, and organize your personal question collection
+                        </CardDescription>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={handlePreviewAll}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Preview All
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Share2 className="h-4 w-4 mr-2" />
+                          Bulk Share
+                        </Button>
+                        <Button 
+                          variant="default" 
+                          size="sm"
+                          onClick={() => setShowCreateExamDialog(true)}
+                          disabled={getQuestionsByType('my-questions').length === 0}
+                          className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create Exam
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <QuestionsList 
+                      questions={getQuestionsByType('my-questions')} 
+                      loading={loading}
+                      onShare={(question) => {
+                        setSelectedQuestion(question);
+                        setShowShareDialog(true);
+                      }}
+                      onView={(question) => {
+                        setSelectedQuestion(question);
+                        setShowPreviewDialog(true);
+                      }}
+                      onDelete={(question) => {
+                        setSelectedQuestionToDelete(question);
+                        setShowDeleteDialog(true);
+                      }}
+                      showShareButton={true}
+                      showDeleteButton={true}
+                      getQuestionBadgeColor={getQuestionBadgeColor}
+                      getQuestionLabel={getQuestionLabel}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
             {/* Shared with Me Tab */}
             <TabsContent value="shared-with-me" className="mt-6">
-              <QuestionsList 
-                questions={getQuestionsByType('shared-with-me')} 
-                loading={loading}
-                onShare={null}
-                showShareButton={false}
-                getQuestionBadgeColor={getQuestionBadgeColor}
-                getQuestionLabel={getQuestionLabel}
-              />
+              <div className="space-y-6">
+                {/* Shared Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="bg-gradient-to-r from-emerald-50 to-teal-100 dark:from-emerald-900 dark:to-teal-800 border-l-4 border-l-emerald-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <Users className="h-8 w-8 text-emerald-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Shared Questions</p>
+                          <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">{getQuestionsByType('shared-with-me').length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-cyan-50 to-blue-100 dark:from-cyan-900 dark:to-blue-800 border-l-4 border-l-cyan-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <User className="h-8 w-8 text-cyan-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-cyan-800 dark:text-cyan-200">Contributors</p>
+                          <p className="text-2xl font-bold text-cyan-900 dark:text-cyan-100">
+                            {[...new Set(getQuestionsByType('shared-with-me').map(q => q.creator_name))].length}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-indigo-50 to-purple-100 dark:from-indigo-900 dark:to-purple-800 border-l-4 border-l-indigo-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <BookOpen className="h-8 w-8 text-indigo-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200">New Topics</p>
+                          <p className="text-2xl font-bold text-indigo-900 dark:text-indigo-100">
+                            {[...new Set(getQuestionsByType('shared-with-me').map(q => q.subject))].length}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Shared Questions */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <CardTitle className="text-emerald-700 dark:text-emerald-300">🤝 Questions Shared With Me</CardTitle>
+                        <CardDescription>
+                          Collaborative questions from other users and admins
+                        </CardDescription>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button variant="outline" size="sm">
+                          <User className="h-4 w-4 mr-2" />
+                          By Author
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <BookOpen className="h-4 w-4 mr-2" />
+                          By Subject
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {getQuestionsByType('shared-with-me').length === 0 ? (
+                      <div className="text-center py-12">
+                        <Users className="h-16 w-16 text-slate-400 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">No Shared Questions Yet</h3>
+                        <p className="text-slate-600 dark:text-slate-400 mb-4">
+                          When other users share questions with you, they'll appear here.
+                        </p>
+                        <div className="text-sm text-slate-500">
+                          <p>💡 Tip: Ask colleagues or instructors to share their questions!</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <QuestionsList 
+                        questions={getQuestionsByType('shared-with-me')} 
+                        loading={loading}
+                        onShare={null}
+                        showShareButton={false}
+                        getQuestionBadgeColor={getQuestionBadgeColor}
+                        getQuestionLabel={getQuestionLabel}
+                        showCollaborativeFeatures={true}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
             {/* All Questions Tab */}
             <TabsContent value="all-questions" className="mt-6">
-              <QuestionsList 
-                questions={getQuestionsByType('all-questions')} 
-                loading={loading}
-                onShare={(question) => {
-                  if (question.user_relation === 'own') {
-                    setSelectedQuestion(question);
-                    setShowShareDialog(true);
-                  }
-                }}
-                showShareButton={false}
-                getQuestionBadgeColor={getQuestionBadgeColor}
-                getQuestionLabel={getQuestionLabel}
-              />
+              <div className="space-y-6">
+                {/* Search and Filter Bar */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex flex-col md:flex-row gap-4">
+                      <div className="flex-1">
+                        <div className="relative">
+                          <Input
+                            placeholder="Search questions by text, subject, or topic..."
+                            className="pl-10"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                          />
+                          <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Select value={selectedSubject} onValueChange={setSelectedSubject}>
+                          <SelectTrigger className="w-32">
+                            <SelectValue placeholder="Subject" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Subjects</SelectItem>
+                            {[...new Set(questions.map(q => q.subject))].map(subject => (
+                              <SelectItem key={subject} value={subject}>{subject}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select value={selectedType} onValueChange={setSelectedType}>
+                          <SelectTrigger className="w-28">
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Types</SelectItem>
+                            <SelectItem value="MCQ">MCQ</SelectItem>
+                            <SelectItem value="MSQ">MSQ</SelectItem>
+                            <SelectItem value="NAT">NAT</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {(searchQuery || selectedSubject !== 'all' || selectedType !== 'all') && (
+                          <Button variant="outline" size="sm" onClick={clearFilters}>
+                            <X className="h-4 w-4 mr-1" />
+                            Clear
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm">
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Statistics Overview */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <Card className="bg-gradient-to-r from-slate-50 to-gray-100 dark:from-slate-800 dark:to-gray-700 border-l-4 border-l-slate-500">
+                    <CardContent className="p-3">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{getQuestionsByType('all-questions').length}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300">
+                          {searchQuery || selectedSubject !== 'all' || selectedType !== 'all' ? 'Filtered' : 'Total'} Questions
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 border-l-4 border-l-blue-500">
+                    <CardContent className="p-3">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                          {getQuestionsByType('all-questions').filter(q => q.question_type === 'MCQ').length}
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-200">MCQ</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900 dark:to-green-800 border-l-4 border-l-green-500">
+                    <CardContent className="p-3">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                          {getQuestionsByType('all-questions').filter(q => q.question_type === 'MSQ').length}
+                        </p>
+                        <p className="text-xs text-green-700 dark:text-green-200">MSQ</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900 dark:to-purple-800 border-l-4 border-l-purple-500">
+                    <CardContent className="p-3">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
+                          {getQuestionsByType('all-questions').filter(q => q.question_type === 'NAT').length}
+                        </p>
+                        <p className="text-xs text-purple-700 dark:text-purple-200">NAT</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900 dark:to-orange-800 border-l-4 border-l-orange-500">
+                    <CardContent className="p-3">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
+                          {[...new Set(getQuestionsByType('all-questions').map(q => q.subject))].length}
+                        </p>
+                        <p className="text-xs text-orange-700 dark:text-orange-200">Subjects</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* All Questions List */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <CardTitle className="text-slate-700 dark:text-slate-300">📚 Complete Question Bank</CardTitle>
+                        <CardDescription>
+                          Browse the entire collection of questions from all sources
+                        </CardDescription>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button variant="outline" size="sm">
+                          <BarChart className="h-4 w-4 mr-2" />
+                          Analytics
+                        </Button>
+                        <Button 
+                          variant="default" 
+                          size="sm"
+                          onClick={() => setShowCreateExamDialog(true)}
+                          disabled={getQuestionsByType('all-questions').length === 0}
+                          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create Exam
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Practice Set
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <QuestionsList 
+                      questions={getQuestionsByType('all-questions')} 
+                      loading={loading}
+                      onShare={(question) => {
+                        if (question.user_relation === 'own') {
+                          setSelectedQuestion(question);
+                          setShowShareDialog(true);
+                        }
+                      }}
+                      showShareButton={false}
+                      getQuestionBadgeColor={getQuestionBadgeColor}
+                      getQuestionLabel={getQuestionLabel}
+                      showDetailedView={true}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
+
+            {/* My Exams Tab */}
+            <TabsContent value="my-exams" className="mt-6">
+              <div className="space-y-6">
+                {/* Exam Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card className="bg-gradient-to-r from-indigo-50 to-purple-100 dark:from-indigo-900 dark:to-purple-800 border-l-4 border-l-indigo-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <BookOpen className="h-8 w-8 text-indigo-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200">Total Exams</p>
+                          <p className="text-2xl font-bold text-indigo-900 dark:text-indigo-100">{exams.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 border-l-4 border-l-blue-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <Play className="h-8 w-8 text-blue-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-blue-800 dark:text-blue-200">Active</p>
+                          <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                            {exams.filter(exam => exam.status === 'active').length}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900 dark:to-green-800 border-l-4 border-l-green-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <CheckCircle className="h-8 w-8 text-green-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-green-800 dark:text-green-200">Published</p>
+                          <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                            {exams.filter(exam => exam.is_published).length}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900 dark:to-orange-800 border-l-4 border-l-orange-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <Users className="h-8 w-8 text-orange-600" />
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-orange-800 dark:text-orange-200">Attempts</p>
+                          <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
+                            {exams.reduce((total, exam) => total + (exam.attempt_count || 0), 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Exam List */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <CardTitle className="text-indigo-700 dark:text-indigo-300">📝 My Created Exams</CardTitle>
+                        <CardDescription>
+                          Manage and monitor your exam configurations
+                        </CardDescription>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setShowCreateExamDialog(true)}
+                          disabled={questions.length === 0}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create New
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {examsLoading ? (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto"></div>
+                        <p className="mt-4 text-slate-600">Loading exams...</p>
+                      </div>
+                    ) : exams.length === 0 ? (
+                      <div className="text-center py-12">
+                        <BookOpen className="h-16 w-16 text-slate-400 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">No Exams Created</h3>
+                        <p className="text-slate-600 dark:text-slate-400 mb-4">
+                          Create your first exam from the available questions.
+                        </p>
+                        <Button 
+                          onClick={() => setShowCreateExamDialog(true)}
+                          disabled={questions.length === 0}
+                          className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create First Exam
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {exams.map((exam) => (
+                          <Card key={exam.id} className="hover:shadow-md transition-shadow">
+                            <CardContent className="p-6">
+                              <div className="flex justify-between items-start mb-4">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-3 mb-2">
+                                    <Badge className="bg-indigo-100 text-indigo-800 border-indigo-300">
+                                      {exam.difficulty_level || 'Medium'}
+                                    </Badge>
+                                    <Badge variant="outline">
+                                      {exam.total_questions} Questions
+                                    </Badge>
+                                    <Badge variant="outline">
+                                      {exam.duration} min
+                                    </Badge>
+                                    {exam.is_published && (
+                                      <Badge className="bg-green-100 text-green-800 border-green-300">
+                                        Published
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                                    {exam.title}
+                                  </h3>
+                                  <p className="text-slate-600 dark:text-slate-400 mb-2">
+                                    {exam.description}
+                                  </p>
+                                  <div className="text-sm text-slate-500">
+                                    <span>Subjects: {exam.subjects?.join(', ') || 'Multiple'}</span>
+                                    <span className="mx-2">•</span>
+                                    <span>Created: {new Date(exam.created_at).toLocaleDateString()}</span>
+                                    <span className="mx-2">•</span>
+                                    <span>Attempts: {exam.attempt_count || 0}</span>
+                                  </div>
+                                </div>
+                                <div className="flex space-x-2 ml-4">
+                                  <Button variant="outline" size="sm" title="View Details">
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="outline" size="sm" title="Edit Exam">
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    title="Delete Exam"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                              
+                              {/* Quick Stats */}
+                              <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                  <div className="text-center">
+                                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                                      {exam.mcq_marks || 1}
+                                    </p>
+                                    <p className="text-slate-600 dark:text-slate-400">MCQ Marks</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                                      {exam.msq_marks || 2}
+                                    </p>
+                                    <p className="text-slate-600 dark:text-slate-400">MSQ Marks</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                                      {exam.nat_marks || 2}
+                                    </p>
+                                    <p className="text-slate-600 dark:text-slate-400">NAT Marks</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                                      {exam.negative_marking ? 'Yes' : 'No'}
+                                    </p>
+                                    <p className="text-slate-600 dark:text-slate-400">Negative Marking</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* CSV Upload Tab */}
+            {user?.role === 'admin' && (
+              <TabsContent value="upload-csv" className="mt-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <Upload className="h-5 w-5 mr-2" />
+                        Upload CSV Questions
+                      </CardTitle>
+                      <CardDescription>
+                        Import questions from a CSV file to add them to the question bank
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            CSV should have columns: question_text, type, subject, topic, option_1, option_1_correct, etc.
+                          </AlertDescription>
+                        </Alert>
+                        <div>
+                          <Label htmlFor="csv-upload">Select CSV File</Label>
+                          <Input
+                            id="csv-upload"
+                            type="file"
+                            accept=".csv"
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              setCsvFile(file);
+                              if (file) {
+                                setCsvPreview(null);
+                                setShowCsvPreview(false);
+                              }
+                            }}
+                            disabled={uploadLoading}
+                          />
+                        </div>
+                        
+                        <div className="flex space-x-3">
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (csvFile) {
+                                handlePreviewCsv(csvFile);
+                              } else {
+                                toast.error('Please select a CSV file first');
+                              }
+                            }}
+                            disabled={uploadLoading || !csvFile}
+                          >
+                            <FileQuestion className="h-4 w-4 mr-2" />
+                            Preview CSV
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              if (csvFile) {
+                                handleFileUpload(csvFile, 'csv');
+                              } else {
+                                toast.error('Please select a CSV file first');
+                              }
+                            }}
+                            disabled={uploadLoading || !csvFile}
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            {uploadLoading ? 'Uploading...' : 'Upload CSV'}
+                          </Button>
+                        </div>
+                        
+                        {showCsvPreview && csvPreview && (
+                          <div className="mt-6">
+                            <CsvPreview preview={csvPreview} onClose={() => setShowCsvPreview(false)} />
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <FileText className="h-5 w-5 mr-2" />
+                        Upload Instructions
+                      </CardTitle>
+                      <CardDescription>
+                        Follow this format for your CSV file
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <h4 className="font-medium text-slate-900">Required CSV Columns:</h4>
+                        <div className="text-sm space-y-1">
+                          <p><code className="bg-slate-100 px-1 rounded">question_text</code> - The question content</p>
+                          <p><code className="bg-slate-100 px-1 rounded">type</code> - MCQ, MSQ, or NAT</p>
+                          <p><code className="bg-slate-100 px-1 rounded">subject</code> - Subject name</p>
+                          <p><code className="bg-slate-100 px-1 rounded">topic</code> - Topic within subject</p>
+                          <p><code className="bg-slate-100 px-1 rounded">option_1</code> to <code className="bg-slate-100 px-1 rounded">option_4</code> - Answer options</p>
+                          <p><code className="bg-slate-100 px-1 rounded">option_1_correct</code> to <code className="bg-slate-100 px-1 rounded">option_4_correct</code> - true/false</p>
+                          <p><code className="bg-slate-100 px-1 rounded">marks</code> - Question marks (optional)</p>
+                          <p><code className="bg-slate-100 px-1 rounded">explanation</code> - Answer explanation (optional)</p>
+                        </div>
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription className="text-xs">
+                            For NAT questions, use the correct_answer column instead of options.
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+            )}
+
+            {/* Management Tab */}
+            {user?.role === 'admin' && (
+              <TabsContent value="manage" className="mt-6">
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Question Bank Statistics</CardTitle>
+                      <CardDescription>Overview of questions in the database</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="text-center p-4 bg-blue-50 rounded-lg">
+                          <div className="text-2xl font-bold text-blue-600">{questions.length}</div>
+                          <div className="text-sm text-blue-600">Total Questions</div>
+                        </div>
+                        <div className="text-center p-4 bg-green-50 rounded-lg">
+                          <div className="text-2xl font-bold text-green-600">
+                            {[...new Set(questions.map(q => q.subject))].length}
+                          </div>
+                          <div className="text-sm text-green-600">Subjects</div>
+                        </div>
+                        <div className="text-center p-4 bg-purple-50 rounded-lg">
+                          <div className="text-2xl font-bold text-purple-600">
+                            {questions.filter(q => q.user_relation === 'admin').length}
+                          </div>
+                          <div className="text-sm text-purple-600">Admin Questions</div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Subject-wise Breakdown</CardTitle>
+                      <CardDescription>Question distribution across subjects</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {[...new Set(questions.map(q => q.subject))].map(subject => {
+                          const subjectQuestions = questions.filter(q => q.subject === subject);
+                          const percentage = questions.length > 0 ? (subjectQuestions.length / questions.length * 100) : 0;
+                          return (
+                            <div key={subject} className="flex items-center justify-between">
+                              <span className="font-medium text-slate-900">{subject}</span>
+                              <div className="flex items-center space-x-2">
+                                <div className="w-32 bg-slate-200 rounded-full h-2">
+                                  <div 
+                                    className="bg-blue-600 h-2 rounded-full" 
+                                    style={{ width: `${percentage}%` }}
+                                  ></div>
+                                </div>
+                                <span className="text-sm text-slate-600 w-12 text-right">
+                                  {subjectQuestions.length}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+            )}
           </Tabs>
         </div>
 
@@ -1259,13 +2609,186 @@ const StudentQuestionBank = () => {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Question Preview Dialog */}
+        <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Question Preview</DialogTitle>
+              <DialogDescription>
+                {previewQuestions.length > 0 ? 
+                  `Previewing ${previewQuestions.length} questions` : 
+                  selectedQuestion ? 'Question Details' : 'Question Preview'
+                }
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {previewQuestions.length > 0 ? (
+                previewQuestions.map((question, index) => (
+                  <Card key={question.id} className="p-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-lg">Question {index + 1}</h4>
+                        <div className="flex space-x-2">
+                          <Badge variant="outline">{question.question_type}</Badge>
+                          <Badge variant="outline">{question.subject}</Badge>
+                          <Badge variant="secondary">{question.marks} marks</Badge>
+                        </div>
+                      </div>
+                      <p className="text-slate-900 dark:text-slate-100 leading-relaxed">
+                        {question.question_text}
+                      </p>
+                      {question.options && question.options.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="font-medium text-sm text-slate-700">Options:</p>
+                          {question.options.map((option, optIndex) => (
+                            <div key={optIndex} className={`p-2 rounded text-sm ${
+                              option.is_correct ? 'bg-green-50 text-green-800 border-l-4 border-green-400' : 'bg-slate-50 text-slate-700'
+                            }`}>
+                              <span className="font-medium">{String.fromCharCode(65 + optIndex)}.</span> {option.text}
+                              {option.is_correct && <span className="ml-2 text-green-600">✓ Correct</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {question.explanation && (
+                        <div className="bg-blue-50 p-3 rounded">
+                          <p className="text-sm font-medium text-blue-800">Explanation:</p>
+                          <p className="text-sm text-blue-700">{question.explanation}</p>
+                        </div>
+                      )}
+                      <div className="text-xs text-slate-500">
+                        Topic: {question.topic} • Difficulty: {question.difficulty || 'Medium'}
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              ) : selectedQuestion && (
+                <Card className="p-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-lg">Question Details</h4>
+                      <div className="flex space-x-2">
+                        <Badge variant="outline">{selectedQuestion.question_type}</Badge>
+                        <Badge variant="outline">{selectedQuestion.subject}</Badge>
+                        <Badge variant="secondary">{selectedQuestion.marks} marks</Badge>
+                      </div>
+                    </div>
+                    <p className="text-slate-900 dark:text-slate-100 leading-relaxed">
+                      {selectedQuestion.question_text}
+                    </p>
+                    {selectedQuestion.options && selectedQuestion.options.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="font-medium text-sm text-slate-700">Options:</p>
+                        {selectedQuestion.options.map((option, optIndex) => (
+                          <div key={optIndex} className={`p-2 rounded text-sm ${
+                            option.is_correct ? 'bg-green-50 text-green-800 border-l-4 border-green-400' : 'bg-slate-50 text-slate-700'
+                          }`}>
+                            <span className="font-medium">{String.fromCharCode(65 + optIndex)}.</span> {option.text}
+                            {option.is_correct && <span className="ml-2 text-green-600">✓ Correct</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {selectedQuestion.explanation && (
+                      <div className="bg-blue-50 p-3 rounded">
+                        <p className="text-sm font-medium text-blue-800">Explanation:</p>
+                        <p className="text-sm text-blue-700">{selectedQuestion.explanation}</p>
+                      </div>
+                    )}
+                    <div className="text-xs text-slate-500">
+                      Topic: {selectedQuestion.topic} • Difficulty: {selectedQuestion.difficulty || 'Medium'}
+                    </div>
+                  </div>
+                </Card>
+              )}
+            </div>
+            <div className="flex justify-end space-x-3">
+              <Button variant="outline" onClick={() => {
+                setShowPreviewDialog(false);
+                setPreviewQuestions([]);
+                setSelectedQuestion(null);
+              }}>
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="text-red-600">Delete Question</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this question? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            {selectedQuestionToDelete && (
+              <div className="bg-slate-50 p-3 rounded">
+                <p className="font-medium text-sm text-slate-900">Question:</p>
+                <p className="text-sm text-slate-700 mt-1">
+                  {selectedQuestionToDelete.question_text.substring(0, 100)}...
+                </p>
+                <div className="flex space-x-2 mt-2">
+                  <Badge variant="outline">{selectedQuestionToDelete.question_type}</Badge>
+                  <Badge variant="outline">{selectedQuestionToDelete.subject}</Badge>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end space-x-3">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowDeleteDialog(false);
+                  setSelectedQuestionToDelete(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive"
+                onClick={() => selectedQuestionToDelete && handleDeleteQuestion(selectedQuestionToDelete.id)}
+                disabled={deleteLoading}
+              >
+                {deleteLoading ? 'Deleting...' : 'Delete Question'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Exam Creation Dialog */}
+        <Dialog open={showCreateExamDialog} onOpenChange={setShowCreateExamDialog}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Plus className="h-5 w-5 mr-2" />
+                Create New Exam
+              </DialogTitle>
+              <DialogDescription>
+                Create a customized exam from existing questions in the database
+              </DialogDescription>
+            </DialogHeader>
+            <ExamCreationForm
+              examFormData={examFormData}
+              examErrors={examErrors}
+              examCreationLoading={examCreationLoading}
+              onFormChange={handleExamFormChange}
+              onSubjectChange={handleExamSubjectChange}
+              onQuestionTypeChange={handleExamQuestionTypeChange}
+              onSubmit={handleCreateExam}
+              availableSubjects={[...new Set(questions.map(q => q.subject))]}
+              onCancel={() => setShowCreateExamDialog(false)}
+            />
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
 };
 
 // Questions List Component
-const QuestionsList = ({ questions, loading, onShare, showShareButton, getQuestionBadgeColor, getQuestionLabel }) => {
+const QuestionsList = ({ questions, loading, onShare, onView, onDelete, showShareButton, showDeleteButton = false, getQuestionBadgeColor, getQuestionLabel }) => {
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -1317,13 +2840,30 @@ const QuestionsList = ({ questions, loading, onShare, showShareButton, getQuesti
                     variant="outline"
                     size="sm"
                     onClick={() => onShare(question)}
+                    title="Share Question"
                   >
                     <Share2 className="h-4 w-4" />
                   </Button>
                 )}
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => onView && onView(question)}
+                  title="View Question Details"
+                >
                   <Eye className="h-4 w-4" />
                 </Button>
+                {showDeleteButton && question.user_relation === 'own' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onDelete && onDelete(question)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    title="Delete Question"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
             {question.options && question.options.length > 0 && (
@@ -1675,432 +3215,6 @@ const QuestionCreateForm = ({ onSubmit, onCancel }) => {
         </form>
       </CardContent>
     </Card>
-  );
-};
-
-// Admin Panel Component
-const AdminPanel = () => {
-  const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('overview');
-  const [loading, setLoading] = useState(false);
-  const [analyticsData, setAnalyticsData] = useState(null);
-  const [usersData, setUsersData] = useState({ users: [], total: 0 });
-  const [chartsData, setChartsData] = useState(null);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [userDetails, setUserDetails] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [questions, setQuestions] = useState([]);
-  const [exams, setExams] = useState([]);
-  const [csvPreview, setCsvPreview] = useState(null);
-  const [showCsvPreview, setShowCsvPreview] = useState(false);
-
-  useEffect(() => {
-    if (user?.role !== 'admin') {
-      navigate('/dashboard');
-      return;
-    }
-    fetchAnalyticsData();
-    fetchUsersData();
-    fetchChartsData();
-    fetchQuestions();
-    fetchExams();
-  }, [user, navigate]);
-
-  const fetchAnalyticsData = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/analytics/overview`);
-      setAnalyticsData(response.data);
-    } catch (error) {
-      toast.error('Failed to fetch analytics data');
-    }
-  };
-
-  const fetchUsersData = async (page = 1, search = '') => {
-    try {
-      const response = await axios.get(`${API}/admin/users`, {
-        params: { page, limit: 10, search }
-      });
-      setUsersData(response.data);
-    } catch (error) {
-      toast.error('Failed to fetch users data');
-    }
-  };
-
-  const fetchChartsData = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/analytics/charts`);
-      setChartsData(response.data);
-    } catch (error) {
-      toast.error('Failed to fetch charts data');
-    }
-  };
-
-  const fetchQuestions = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/questions`);
-      setQuestions(response.data.questions || []);
-    } catch (error) {
-      toast.error('Failed to fetch questions');
-    }
-  };
-
-  const fetchExams = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/exams`);
-      setExams(response.data.exams || []);
-    } catch (error) {
-      toast.error('Failed to fetch exams');
-    }
-  };
-
-  const fetchUserDetails = async (userId) => {
-    try {
-      const response = await axios.get(`${API}/admin/users/${userId}/details`);
-      setUserDetails(response.data);
-    } catch (error) {
-      toast.error('Failed to fetch user details');
-    }
-  };
-
-  const handleFileUpload = async (file, type) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    setLoading(true);
-    try {
-      const response = await axios.post(`${API}/admin/upload/${type}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      toast.success(response.data.message);
-      if (type === 'csv') {
-        fetchQuestions();
-        setCsvPreview(null);
-        setShowCsvPreview(false);
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.detail || `Failed to upload ${type.toUpperCase()}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePreviewCsv = async (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    setLoading(true);
-    try {
-      const response = await axios.post(`${API}/admin/preview-csv`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      setCsvPreview(response.data);
-      setShowCsvPreview(true);
-      toast.success(`Preview loaded: ${response.data.showing_rows} of ${response.data.total_rows} rows`);
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to preview CSV');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              <Settings className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Admin Panel</h1>
-            </div>
-            
-            {/* Mobile menu */}
-            <div className="flex items-center space-x-2 md:hidden">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => navigate('/dashboard')}
-                title="Dashboard"
-              >
-                <Home className="h-4 w-4" />
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={toggleTheme}
-                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-              >
-                {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
-            
-            {/* Desktop menu */}
-            <div className="hidden md:flex items-center space-x-4">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => navigate('/dashboard')}
-              >
-                <Home className="h-4 w-4 mr-2" />
-                Dashboard
-              </Button>
-              <span className="text-slate-600 dark:text-slate-300 hidden lg:block">{user?.full_name}</span>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={toggleTheme}
-                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-              >
-                {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                <LogOut className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Logout</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 gap-1">
-            <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
-            <TabsTrigger value="users" className="text-xs sm:text-sm">Users</TabsTrigger>
-            <TabsTrigger value="analytics" className="text-xs sm:text-sm">Analytics</TabsTrigger>
-            <TabsTrigger value="management" className="text-xs sm:text-sm">Management</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="questions" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Question Management</CardTitle>
-                <CardDescription>
-                  Manage your question bank for GATE exams
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {questions.length === 0 ? (
-                    <div className="text-center py-8">
-                      <FileText className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-slate-900 mb-2">No Questions Found</h3>
-                      <p className="text-slate-600">Upload a CSV file to add questions to your database.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {questions.slice(0, 10).map((question) => (
-                        <div key={question.id} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <p className="font-medium text-slate-900 mb-2">
-                                {question.question_text.substring(0, 100)}...
-                              </p>
-                              <div className="flex space-x-4 text-sm text-slate-600">
-                                <Badge variant="outline">{question.question_type}</Badge>
-                                <span>{question.subject}</span>
-                                <span>{question.topic}</span>
-                                <span>{question.marks} marks</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {questions.length > 10 && (
-                        <div className="text-center py-4">
-                          <p className="text-slate-600">
-                            Showing 10 of {questions.length} questions
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="exams" className="mt-6">
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Create New Exam</CardTitle>
-                  <CardDescription>
-                    Configure a new exam with questions from your database
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ExamCreationForm onExamCreated={() => { fetchExams(); toast.success('Exam created successfully!'); }} />
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Existing Exams</CardTitle>
-                  <CardDescription>
-                    Manage your existing exam configurations
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {exams.length === 0 ? (
-                    <div className="text-center py-8">
-                      <BarChart className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-slate-900 mb-2">No Exams Found</h3>
-                      <p className="text-slate-600">Create your first exam using the form above.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {exams.map((exam) => (
-                        <div key={exam.id} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <h4 className="font-semibold text-slate-900 mb-1">{exam.name}</h4>
-                              <p className="text-slate-600 text-sm mb-2">{exam.description}</p>
-                              <div className="flex space-x-4 text-sm text-slate-500">
-                                <span>📝 {exam.total_questions} questions</span>
-                                <span>⏱️ {exam.duration_minutes} minutes</span>
-                                <span>📚 {exam.subjects.join(', ')}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="upload" className="mt-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Upload className="h-5 w-5 mr-2" />
-                    Upload CSV
-                  </CardTitle>
-                  <CardDescription>
-                    Import questions from a CSV file
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        CSV should have columns: question_text, type, subject, topic, option_1, option_1_correct, etc.
-                      </AlertDescription>
-                    </Alert>
-                    <div>
-                      <Label htmlFor="csv-upload">Select CSV File</Label>
-                      <Input
-                        id="csv-upload"
-                        type="file"
-                        accept=".csv"
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file) {
-                            setCsvPreview(null);
-                            setShowCsvPreview(false);
-                          }
-                        }}
-                        disabled={loading}
-                      />
-                    </div>
-                    
-                    {/* Preview and Upload Buttons */}
-                    <div className="flex space-x-3">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          const fileInput = document.getElementById('csv-upload');
-                          const file = fileInput?.files[0];
-                          if (file) {
-                            handlePreviewCsv(file);
-                          } else {
-                            toast.error('Please select a CSV file first');
-                          }
-                        }}
-                        disabled={loading}
-                      >
-                        <FileQuestion className="h-4 w-4 mr-2" />
-                        Preview CSV
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          const fileInput = document.getElementById('csv-upload');
-                          const file = fileInput?.files[0];
-                          if (file) {
-                            handleFileUpload(file, 'csv');
-                          } else {
-                            toast.error('Please select a CSV file first');
-                          }
-                        }}
-                        disabled={loading}
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        {loading ? 'Uploading...' : 'Upload CSV'}
-                      </Button>
-                    </div>
-                    
-                    {/* CSV Preview */}
-                    {showCsvPreview && csvPreview && (
-                      <CsvPreview preview={csvPreview} onClose={() => setShowCsvPreview(false)} />
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Upload className="h-5 w-5 mr-2" />
-                    Upload PDF
-                  </CardTitle>
-                  <CardDescription>
-                    Extract text from PDF files
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        PDF text extraction is for preview only. Convert to CSV format for importing questions.
-                      </AlertDescription>
-                    </Alert>
-                    <div>
-                      <Label htmlFor="pdf-upload">Select PDF File</Label>
-                      <Input
-                        id="pdf-upload"
-                        type="file"
-                        accept=".pdf"
-                        onChange={(e) => {
-                          if (e.target.files[0]) {
-                            handleFileUpload(e.target.files[0], 'pdf');
-                          }
-                        }}
-                        disabled={loading}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </main>
-    </div>
   );
 };
 
@@ -3016,11 +4130,6 @@ function App() {
               <Route path="/dashboard" element={
                 <ProtectedRoute>
                   <Dashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/admin" element={
-                <ProtectedRoute>
-                  <AdminPanel />
                 </ProtectedRoute>
               } />
               <Route path="/exam/:sessionId" element={
