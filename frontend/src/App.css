@@ -15,6 +15,9 @@ body {
   background-color: #f8fafc;
   color: #334155;
   line-height: 1.6;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  -webkit-overflow-scrolling: touch;
 }
 
 code {
@@ -184,6 +187,53 @@ select:focus {
   
   .mobile-full {
     width: 100% !important;
+  }
+  
+  /* Touch-friendly button sizing */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+  }
+  
+  /* Prevent zoom on input focus (iOS) */
+  input, select, textarea {
+    font-size: 16px;
+    touch-action: manipulation;
+  }
+  
+  /* Better touch scrolling */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Improve tap targets */
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Mobile-optimized cards */
+  .mobile-card {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  /* Mobile header adjustments */
+  .mobile-header {
+    padding: 0.75rem 1rem;
+  }
+  
+  /* Better mobile form spacing */
+  .mobile-form {
+    padding: 1rem;
+  }
+  
+  .mobile-form .form-group {
+    margin-bottom: 1.25rem;
   }
 }
 

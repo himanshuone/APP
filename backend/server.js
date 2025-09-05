@@ -490,6 +490,138 @@ app.post('/api/admin/upload/csv', authenticate, requireAdmin, upload.single('fil
   }
 });
 
+app.post('/api/admin/preview-csv', authenticate, requireAdmin, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.originalname.endsWith('.csv')) {
+      return res.status(400).json({ detail: 'File must be a CSV' });
+    }
+
+    const csvData = req.file.buffer.toString('utf-8');
+    const previewQuestions = [];
+    let headers = [];
+    let rowCount = 0;
+    
+    // Parse CSV - Better handling of quoted fields
+    const rows = [];
+    const lines = csvData.split('\n');
+    
+    for (const line of lines) {
+      if (line.trim()) {
+        // Simple CSV parser that handles quoted fields
+        const row = [];
+        let currentField = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            row.push(currentField.trim());
+            currentField = '';
+          } else {
+            currentField += char;
+          }
+        }
+        row.push(currentField.trim()); // Add the last field
+        rows.push(row);
+      }
+    }
+    
+    if (rows.length === 0) {
+      return res.status(400).json({ detail: 'CSV file is empty' });
+    }
+    
+    headers = rows[0].map(h => h.trim());
+    const totalRows = rows.length - 1; // Excluding header
+    
+    // Process first 10 rows (or less) for preview
+    for (let i = 1; i < Math.min(rows.length, 11); i++) {
+      try {
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header] = rows[i][index] ? rows[i][index].trim().replace(/^"|"$/g, '') : '';
+        });
+        
+        if (!row.question_text) {
+          previewQuestions.push({
+            row_number: i + 1,
+            error: 'Missing question text',
+            raw_row: row
+          });
+          rowCount++;
+          continue;
+        }
+
+        // Parse question type
+        const questionType = (row.question_type || row.type || 'MCQ').toUpperCase();
+        if (!Object.values(QuestionType).includes(questionType)) {
+          previewQuestions.push({
+            row_number: i + 1,
+            error: `Invalid question type: ${questionType}`,
+            raw_row: row
+          });
+          rowCount++;
+          continue;
+        }
+
+        // Parse options for MCQ/MSQ
+        const options = [];
+        if ([QuestionType.MCQ, QuestionType.MSQ].includes(questionType)) {
+          for (let j = 1; j <= 4; j++) {
+            const optionText = row[`option_${j}`];
+            if (optionText && optionText.trim() !== '') {
+              const correctValue = (row[`option_${j}_correct`] || '').toLowerCase();
+              const isCorrect = ['true', '1', 'yes'].includes(correctValue);
+              
+              options.push({
+                text: optionText,
+                is_correct: isCorrect
+              });
+            }
+          }
+        }
+
+        previewQuestions.push({
+          row_number: i + 1,
+          question_text: row.question_text,
+          question_type: questionType,
+          subject: row.subject || 'General',
+          topic: row.topic || 'General',
+          difficulty: row.difficulty || 'medium',
+          marks: parseFloat(row.marks || 1.0),
+          options,
+          correct_answer: row.correct_answer,
+          explanation: row.explanation || '',
+          raw_row: row
+        });
+        rowCount++;
+        
+      } catch (error) {
+        previewQuestions.push({
+          row_number: i + 1,
+          error: error.message,
+          raw_row: rows[i]
+        });
+        rowCount++;
+      }
+    }
+
+    res.json({
+      headers,
+      preview_questions: previewQuestions,
+      total_rows: totalRows,
+      showing_rows: Math.min(10, totalRows),
+      filename: req.file.originalname
+    });
+
+  } catch (error) {
+    console.error('CSV preview error:', error);
+    res.status(500).json({ detail: 'Failed to preview CSV file' });
+  }
+});
+
 app.post('/api/admin/upload/pdf', authenticate, requireAdmin, upload.single('file'), async (req, res) => {
   try {
     if (!req.file || !req.file.originalname.endsWith('.pdf')) {
@@ -887,6 +1019,231 @@ app.get('/api/results/:sessionId', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get exam result error:', error);
     res.status(500).json({ detail: 'Failed to fetch result' });
+  }
+});
+
+// Admin Analytics Routes
+app.get('/api/admin/analytics/overview', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const [totalUsers, totalQuestions, totalExams, totalSessions] = await Promise.all([
+      User.countDocuments(),
+      Question.countDocuments(),
+      ExamConfig.countDocuments(),
+      ExamSession.countDocuments()
+    ]);
+
+    const recentUsers = await User.find()
+      .sort({ created_at: -1 })
+      .limit(5)
+      .select('-password -_id -__v');
+
+    const activeUsers = await ExamSession.distinct('user_id', {
+      start_time: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Last 7 days
+    });
+
+    const completedExams = await ExamSession.countDocuments({ submitted: true });
+    const avgScore = await ExamResult.aggregate([
+      { $group: { _id: null, avgPercentage: { $avg: '$percentage' } } }
+    ]);
+
+    res.json({
+      total_users: totalUsers,
+      total_questions: totalQuestions,
+      total_exams: totalExams,
+      total_sessions: totalSessions,
+      active_users: activeUsers.length,
+      completed_exams: completedExams,
+      average_score: avgScore[0]?.avgPercentage || 0,
+      recent_users: recentUsers
+    });
+  } catch (error) {
+    console.error('Get admin analytics error:', error);
+    res.status(500).json({ detail: 'Failed to fetch analytics' });
+  }
+});
+
+app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    let query = {};
+    if (search) {
+      query = {
+        $or: [
+          { full_name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
+        ]
+      };
+    }
+
+    const [users, totalUsers] = await Promise.all([
+      User.find(query)
+        .select('-password -_id -__v')
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      User.countDocuments(query)
+    ]);
+
+    // Get user stats
+    const usersWithStats = await Promise.all(
+      users.map(async (user) => {
+        const userObj = user.toObject();
+        
+        const [examsTaken, totalScore, lastActive] = await Promise.all([
+          ExamSession.countDocuments({ user_id: user.id, submitted: true }),
+          ExamResult.aggregate([
+            { $match: { user_id: user.id } },
+            { $group: { _id: null, avgScore: { $avg: '$percentage' } } }
+          ]),
+          ExamSession.findOne({ user_id: user.id }).sort({ start_time: -1 }).select('start_time')
+        ]);
+
+        return {
+          ...userObj,
+          exams_taken: examsTaken,
+          average_score: totalScore[0]?.avgScore || 0,
+          last_active: lastActive?.start_time || user.created_at
+        };
+      })
+    );
+
+    res.json({
+      users: usersWithStats,
+      total: totalUsers,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total_pages: Math.ceil(totalUsers / parseInt(limit))
+    });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ detail: 'Failed to fetch users' });
+  }
+});
+
+app.get('/api/admin/users/:userId/details', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findOne({ id: userId }).select('-password -_id -__v');
+    if (!user) {
+      return res.status(404).json({ detail: 'User not found' });
+    }
+
+    const [examSessions, examResults] = await Promise.all([
+      ExamSession.find({ user_id: userId })
+        .sort({ start_time: -1 })
+        .select('-_id -__v'),
+      ExamResult.find({ user_id: userId })
+        .sort({ submitted_at: -1 })
+        .select('-_id -__v')
+    ]);
+
+    // Get exam configs for sessions
+    const sessionDetails = await Promise.all(
+      examSessions.map(async (session) => {
+        const examConfig = await ExamConfig.findOne({ id: session.exam_config_id })
+          .select('name description -_id');
+        return {
+          ...session.toObject(),
+          exam_name: examConfig?.name || 'Unknown Exam',
+          exam_description: examConfig?.description || ''
+        };
+      })
+    );
+
+    const stats = {
+      total_exams_taken: examResults.length,
+      total_sessions: examSessions.length,
+      completed_sessions: examSessions.filter(s => s.submitted).length,
+      average_score: examResults.length > 0 
+        ? examResults.reduce((sum, result) => sum + result.percentage, 0) / examResults.length 
+        : 0,
+      best_score: examResults.length > 0 
+        ? Math.max(...examResults.map(r => r.percentage)) 
+        : 0
+    };
+
+    res.json({
+      user: user.toObject(),
+      stats,
+      recent_sessions: sessionDetails.slice(0, 10),
+      recent_results: examResults.slice(0, 10)
+    });
+  } catch (error) {
+    console.error('Get user details error:', error);
+    res.status(500).json({ detail: 'Failed to fetch user details' });
+  }
+});
+
+app.get('/api/admin/analytics/charts', authenticate, requireAdmin, async (req, res) => {
+  try {
+    // User registration over time (last 30 days)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const userRegistrations = await User.aggregate([
+      { $match: { created_at: { $gte: thirtyDaysAgo } } },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$created_at' }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Exam completion over time (last 30 days)
+    const examCompletions = await ExamResult.aggregate([
+      { $match: { submitted_at: { $gte: thirtyDaysAgo } } },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$submitted_at' }
+          },
+          count: { $sum: 1 },
+          avgScore: { $avg: '$percentage' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Score distribution
+    const scoreDistribution = await ExamResult.aggregate([
+      {
+        $bucket: {
+          groupBy: '$percentage',
+          boundaries: [0, 20, 40, 60, 80, 100],
+          default: 'Other',
+          output: {
+            count: { $sum: 1 }
+          }
+        }
+      }
+    ]);
+
+    // Popular subjects
+    const popularSubjects = await Question.aggregate([
+      {
+        $group: {
+          _id: '$subject',
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } },
+      { $limit: 10 }
+    ]);
+
+    res.json({
+      user_registrations: userRegistrations,
+      exam_completions: examCompletions,
+      score_distribution: scoreDistribution,
+      popular_subjects: popularSubjects
+    });
+  } catch (error) {
+    console.error('Get analytics charts error:', error);
+    res.status(500).json({ detail: 'Failed to fetch chart data' });
   }
 });
 

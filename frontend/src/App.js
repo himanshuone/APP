@@ -48,7 +48,8 @@ import {
   X,
   Check,
   Minus,
-  FileQuestion
+  FileQuestion,
+  Menu
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -378,6 +379,7 @@ const Dashboard = () => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [exams, setExams] = useState([]);
   const [examHistory, setExamHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -444,15 +446,49 @@ const Dashboard = () => {
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <BookOpen className="h-8 w-8 text-blue-600" />
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white">GATE Simulator</h1>
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <BookOpen className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">GATE Simulator</h1>
             </div>
-            <div className="flex items-center space-x-4">
+            
+            {/* Mobile menu */}
+            <div className="flex items-center space-x-2 md:hidden">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                title="Menu"
+              >
+                {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              </Button>
+            </div>
+            
+            {/* Desktop menu */}
+            <div className="hidden md:flex items-center space-x-4">
               <Badge variant={user?.role === 'admin' ? 'default' : 'secondary'}>
                 {user?.role?.toUpperCase()}
               </Badge>
-              <span className="text-gray-600 dark:text-gray-300">{user?.full_name}</span>
+              <span className="text-gray-600 dark:text-gray-300 hidden lg:block">{user?.full_name}</span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => navigate('/questions')}
+                className="hidden sm:flex"
+              >
+                <BookOpen className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Question Bank</span>
+              </Button>
+              {user?.role === 'admin' && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate('/admin')}
+                  className="hidden sm:flex"
+                >
+                  <Settings className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Admin Panel</span>
+                </Button>
+              )}
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -461,32 +497,76 @@ const Dashboard = () => {
               >
                 {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => navigate('/questions')}
-              >
-                <BookOpen className="h-4 w-4 mr-2" />
-                Question Bank
-              </Button>
-              {user?.role === 'admin' && (
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate('/admin')}
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Admin Panel
-                </Button>
-              )}
               <Button variant="outline" size="sm" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                Logout
+                <span className="hidden sm:inline">Logout</span>
               </Button>
             </div>
           </div>
         </div>
       </header>
+
+      {/* Mobile Navigation Drawer */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-lg">
+          <div className="px-4 py-3 space-y-3">
+            <div className="flex items-center justify-center py-2">
+              <Badge variant={user?.role === 'admin' ? 'default' : 'secondary'}>
+                {user?.role?.toUpperCase()}
+              </Badge>
+              <span className="ml-3 text-gray-600 dark:text-gray-300 font-medium">{user?.full_name}</span>
+            </div>
+            <hr className="border-gray-200 dark:border-gray-600" />
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start" 
+              onClick={() => {
+                navigate('/questions');
+                setMobileMenuOpen(false);
+              }}
+            >
+              <BookOpen className="h-4 w-4 mr-3" />
+              Question Bank
+            </Button>
+            {user?.role === 'admin' && (
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start" 
+                onClick={() => {
+                  navigate('/admin');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <Settings className="h-4 w-4 mr-3" />
+                Admin Panel
+              </Button>
+            )}
+            <hr className="border-gray-200 dark:border-gray-600" />
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start" 
+              onClick={() => {
+                toggleTheme();
+                setMobileMenuOpen(false);
+              }}
+            >
+              {theme === 'light' ? <Moon className="h-4 w-4 mr-3" /> : <Sun className="h-4 w-4 mr-3" />}
+              {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+            </Button>
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950" 
+              onClick={() => {
+                logout();
+                setMobileMenuOpen(false);
+              }}
+            >
+              <LogOut className="h-4 w-4 mr-3" />
+              Logout
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -520,7 +600,7 @@ const Dashboard = () => {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {availableExams.map((exam) => (
                 <Card key={exam.id} className="hover:shadow-lg transition-shadow dark:bg-gray-800 dark:border-gray-700">
                   <CardHeader>
@@ -567,7 +647,7 @@ const Dashboard = () => {
         {completedExams.length > 0 && (
           <div>
             <h3 className="text-2xl font-semibold text-slate-900 dark:text-white mb-6">Completed Exams</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {completedExams.map((exam) => {
                 const history = getExamHistory(exam.id);
                 const latestAttempt = history.sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))[0];
@@ -1016,11 +1096,36 @@ const StudentQuestionBank = () => {
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <BookOpen className="h-8 w-8 text-blue-600" />
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white">Question Bank</h1>
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <BookOpen className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Question Bank</h1>
             </div>
-            <div className="flex items-center space-x-4">
+            
+            {/* Mobile menu */}
+            <div className="flex items-center space-x-2 md:hidden">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => navigate('/dashboard')}
+                title="Dashboard"
+              >
+                <Home className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={toggleTheme}
+                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+              >
+                {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              </Button>
+              <Button variant="outline" size="sm" onClick={logout}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {/* Desktop menu */}
+            <div className="hidden md:flex items-center space-x-4">
               <Button 
                 variant="outline" 
                 size="sm"
@@ -1029,7 +1134,7 @@ const StudentQuestionBank = () => {
                 <Home className="h-4 w-4 mr-2" />
                 Dashboard
               </Button>
-              <span className="text-slate-600 dark:text-slate-300">{user?.full_name}</span>
+              <span className="text-slate-600 dark:text-slate-300 hidden lg:block">{user?.full_name}</span>
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -1040,7 +1145,7 @@ const StudentQuestionBank = () => {
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                Logout
+                <span className="hidden sm:inline">Logout</span>
               </Button>
             </div>
           </div>
@@ -1578,37 +1683,61 @@ const AdminPanel = () => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('questions');
-  const [questions, setQuestions] = useState([]);
-  const [exams, setExams] = useState([]);
+  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(false);
-  const [csvPreview, setCsvPreview] = useState(null);
-  const [showCsvPreview, setShowCsvPreview] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [usersData, setUsersData] = useState({ users: [], total: 0 });
+  const [chartsData, setChartsData] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userDetails, setUserDetails] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (user?.role !== 'admin') {
       navigate('/dashboard');
       return;
     }
-    fetchQuestions();
-    fetchExams();
+    fetchAnalyticsData();
+    fetchUsersData();
+    fetchChartsData();
   }, [user, navigate]);
 
-  const fetchQuestions = async () => {
+  const fetchAnalyticsData = async () => {
     try {
-      const response = await axios.get(`${API}/admin/questions`);
-      setQuestions(response.data);
+      const response = await axios.get(`${API}/admin/analytics/overview`);
+      setAnalyticsData(response.data);
     } catch (error) {
-      toast.error('Failed to fetch questions');
+      toast.error('Failed to fetch analytics data');
     }
   };
 
-  const fetchExams = async () => {
+  const fetchUsersData = async (page = 1, search = '') => {
     try {
-      const response = await axios.get(`${API}/admin/exams`);
-      setExams(response.data);
+      const response = await axios.get(`${API}/admin/users`, {
+        params: { page, limit: 10, search }
+      });
+      setUsersData(response.data);
     } catch (error) {
-      toast.error('Failed to fetch exams');
+      toast.error('Failed to fetch users data');
+    }
+  };
+
+  const fetchChartsData = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/analytics/charts`);
+      setChartsData(response.data);
+    } catch (error) {
+      toast.error('Failed to fetch charts data');
+    }
+  };
+
+  const fetchUserDetails = async (userId) => {
+    try {
+      const response = await axios.get(`${API}/admin/users/${userId}/details`);
+      setUserDetails(response.data);
+    } catch (error) {
+      toast.error('Failed to fetch user details');
     }
   };
 
@@ -1661,11 +1790,36 @@ const AdminPanel = () => {
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Settings className="h-8 w-8 text-blue-600" />
-              <h1 className="text-xl font-bold text-slate-900">Admin Panel</h1>
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <Settings className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Admin Panel</h1>
             </div>
-            <div className="flex items-center space-x-4">
+            
+            {/* Mobile menu */}
+            <div className="flex items-center space-x-2 md:hidden">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => navigate('/dashboard')}
+                title="Dashboard"
+              >
+                <Home className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={toggleTheme}
+                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+              >
+                {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              </Button>
+              <Button variant="outline" size="sm" onClick={logout}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {/* Desktop menu */}
+            <div className="hidden md:flex items-center space-x-4">
               <Button 
                 variant="outline" 
                 size="sm"
@@ -1674,7 +1828,7 @@ const AdminPanel = () => {
                 <Home className="h-4 w-4 mr-2" />
                 Dashboard
               </Button>
-              <span className="text-slate-600">{user?.full_name}</span>
+              <span className="text-slate-600 dark:text-slate-300 hidden lg:block">{user?.full_name}</span>
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -1685,7 +1839,7 @@ const AdminPanel = () => {
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                Logout
+                <span className="hidden sm:inline">Logout</span>
               </Button>
             </div>
           </div>
@@ -1695,10 +1849,11 @@ const AdminPanel = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="questions">Questions</TabsTrigger>
-            <TabsTrigger value="exams">Exams</TabsTrigger>
-            <TabsTrigger value="upload">Upload</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 gap-1">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+            <TabsTrigger value="users" className="text-xs sm:text-sm">Users</TabsTrigger>
+            <TabsTrigger value="analytics" className="text-xs sm:text-sm">Analytics</TabsTrigger>
+            <TabsTrigger value="management" className="text-xs sm:text-sm">Management</TabsTrigger>
           </TabsList>
 
           <TabsContent value="questions" className="mt-6">
@@ -1803,7 +1958,7 @@ const AdminPanel = () => {
           </TabsContent>
 
           <TabsContent value="upload" className="mt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center">
@@ -2103,19 +2258,20 @@ const ExamInterface = () => {
       {/* Header */}
       <header className="bg-white border-b border-slate-200 shadow-sm px-4 py-3">
         <div className="flex justify-between items-center">
-          <div className="flex items-center space-x-4">
-            <BookOpen className="h-6 w-6 text-blue-600" />
-            <h1 className="text-lg font-semibold text-slate-900">GATE Exam</h1>
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+            <h1 className="text-base sm:text-lg font-semibold text-slate-900">GATE Exam</h1>
           </div>
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-2">
-              <Clock className="h-5 w-5 text-slate-600" />
-              <span className={`font-mono text-lg font-semibold ${timeLeft < 600 ? 'text-red-600' : 'text-slate-900'}`}>
+          <div className="flex items-center space-x-2 sm:space-x-6">
+            <div className="flex items-center space-x-1 sm:space-x-2">
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-slate-600" />
+              <span className={`font-mono text-sm sm:text-lg font-semibold ${timeLeft < 600 ? 'text-red-600' : 'text-slate-900'}`}>
                 {formatTime(timeLeft)}
               </span>
             </div>
             <Button 
               variant="destructive" 
+              size="sm"
               onClick={() => setShowSubmitDialog(true)}
               disabled={isSubmitting}
             >
@@ -2125,11 +2281,11 @@ const ExamInterface = () => {
         </div>
       </header>
 
-      <div className="flex-1 flex">
+      <div className="flex-1 flex flex-col lg:flex-row">
         {/* Question Palette */}
-        <div className="w-80 bg-white border-r border-slate-200 p-4">
+        <div className="lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 p-4">
           <h3 className="font-semibold text-slate-900 mb-4">Questions</h3>
-          <div className="grid grid-cols-5 gap-2 mb-6">
+          <div className="grid grid-cols-8 sm:grid-cols-10 lg:grid-cols-5 gap-2 mb-6">
             {session.questions.map((_, index) => (
               <Button
                 key={index}
@@ -2165,9 +2321,9 @@ const ExamInterface = () => {
         </div>
 
         {/* Question Area */}
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-4 sm:p-6">
           <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-lg font-semibold text-slate-900">
                   Question {currentQuestion.question_number} of {currentQuestion.total_questions}
@@ -2241,29 +2397,33 @@ const ExamInterface = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex justify-between">
-                <div className="flex space-x-3">
+              <div className="flex flex-col sm:flex-row justify-between space-y-3 sm:space-y-0">
+                <div className="flex space-x-2 sm:space-x-3 justify-center sm:justify-start">
                   <Button
                     variant="outline"
+                    size="sm"
                     onClick={handlePrevious}
                     disabled={currentIndex === 0}
                   >
                     Previous
                   </Button>
                   <Button
+                    size="sm"
                     onClick={handleNext}
                     disabled={currentIndex === session.questions.length - 1}
                   >
                     Next
                   </Button>
                 </div>
-                <div className="flex space-x-3">
-                  <Button variant="outline" onClick={clearResponse}>
-                    Clear Response
+                <div className="flex space-x-2 sm:space-x-3 justify-center sm:justify-end">
+                  <Button variant="outline" size="sm" onClick={clearResponse}>
+                    <span className="hidden sm:inline">Clear Response</span>
+                    <span className="sm:hidden">Clear</span>
                   </Button>
-                  <Button variant="outline" onClick={markForReview}>
-                    <Flag className="h-4 w-4 mr-2" />
-                    Mark for Review
+                  <Button variant="outline" size="sm" onClick={markForReview}>
+                    <Flag className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Mark for Review</span>
+                    <span className="sm:hidden">Mark</span>
                   </Button>
                 </div>
               </div>
