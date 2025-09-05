@@ -1692,6 +1692,10 @@ const AdminPanel = () => {
   const [userDetails, setUserDetails] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [questions, setQuestions] = useState([]);
+  const [exams, setExams] = useState([]);
+  const [csvPreview, setCsvPreview] = useState(null);
+  const [showCsvPreview, setShowCsvPreview] = useState(false);
 
   useEffect(() => {
     if (user?.role !== 'admin') {
@@ -1701,6 +1705,8 @@ const AdminPanel = () => {
     fetchAnalyticsData();
     fetchUsersData();
     fetchChartsData();
+    fetchQuestions();
+    fetchExams();
   }, [user, navigate]);
 
   const fetchAnalyticsData = async () => {
@@ -1729,6 +1735,24 @@ const AdminPanel = () => {
       setChartsData(response.data);
     } catch (error) {
       toast.error('Failed to fetch charts data');
+    }
+  };
+
+  const fetchQuestions = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/questions`);
+      setQuestions(response.data.questions || []);
+    } catch (error) {
+      toast.error('Failed to fetch questions');
+    }
+  };
+
+  const fetchExams = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/exams`);
+      setExams(response.data.exams || []);
+    } catch (error) {
+      toast.error('Failed to fetch exams');
     }
   };
 

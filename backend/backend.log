@@ -1,5 +1,14 @@
-npm error Missing script: "dev"
-npm error
-npm error To see a list of scripts, run:
-npm error   npm run
-npm error A complete log of this run can be found in: /Users/himanshukumar/.npm/_logs/2025-09-05T07_55_20_674Z-debug-0.log
+
+> gate-exam-backend@2.0.0 start
+> node server.js
+
+(node:28707) [MONGODB DRIVER] Warning: useNewUrlParser is a deprecated option: useNewUrlParser has no effect since Node.js Driver version 4.0.0 and will be removed in the next major version
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:28707) [MONGODB DRIVER] Warning: useUnifiedTopology is a deprecated option: useUnifiedTopology has no effect since Node.js Driver version 4.0.0 and will be removed in the next major version
+🚀 GATE Exam Simulator API running on port 8001
+📱 Environment: development
+🗄️  Database: mongodb://localhost:27017/gate_exam
+Connected to MongoDB
+127.0.0.1 - - [05/Sep/2025:08:11:49 +0000] "OPTIONS /api/auth/login HTTP/1.1" 204 0 "http://localhost:3000/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+127.0.0.1 - - [05/Sep/2025:08:11:49 +0000] "OPTIONS /api/auth/login HTTP/1.1" 204 0 "http://localhost:3000/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+127.0.0.1 - - [05/Sep/2025:08:11:52 +0000] "OPTIONS /api/auth/login HTTP/1.1" 204 0 "http://localhost:3000/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"

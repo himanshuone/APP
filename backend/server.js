@@ -1022,6 +1022,100 @@ app.get('/api/results/:sessionId', authenticate, async (req, res) => {
   }
 });
 
+app.get('/api/detailed-results/:sessionId', authenticate, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    // First check if the exam session exists and belongs to the user
+    const session = await ExamSession.findOne({
+      id: sessionId,
+      user_id: req.user.id,
+      submitted: true
+    });
+
+    if (!session) {
+      return res.status(404).json({ detail: 'Exam session not found or not submitted' });
+    }
+
+    // Get the exam result
+    const result = await ExamResult.findOne({
+      exam_session_id: sessionId,
+      user_id: req.user.id
+    }).select('-_id -__v');
+
+    if (!result) {
+      return res.status(404).json({ detail: 'Result not found' });
+    }
+
+    // Get detailed question-wise results
+    const detailedQuestions = [];
+    
+    for (const questionId of session.questions) {
+      const question = await Question.findOne({ id: questionId }).select('-_id -__v');
+      if (!question) continue;
+
+      const userAnswer = session.answers.get(questionId);
+      const questionStatus = session.question_status.get(questionId) || QuestionStatus.NOT_VISITED;
+      
+      // Determine if answer is correct
+      let isCorrect = false;
+      let correctAnswerValue = null;
+      
+      if (userAnswer) {
+        if (question.question_type === QuestionType.MCQ) {
+          const correctOptions = question.options.filter(opt => opt.is_correct);
+          isCorrect = correctOptions.some(opt => opt.id === userAnswer);
+          correctAnswerValue = correctOptions.map(opt => opt.id);
+        } else if (question.question_type === QuestionType.MSQ) {
+          const correctOptions = new Set(
+            question.options
+              .filter(opt => opt.is_correct)
+              .map(opt => opt.id)
+          );
+          const userOptions = new Set(Array.isArray(userAnswer) ? userAnswer : [userAnswer]);
+          isCorrect = correctOptions.size === userOptions.size &&
+            [...correctOptions].every(opt => userOptions.has(opt));
+          correctAnswerValue = [...correctOptions];
+        } else if (question.question_type === QuestionType.NAT) {
+          try {
+            isCorrect = parseFloat(userAnswer) === parseFloat(question.correct_answer);
+            correctAnswerValue = question.correct_answer;
+          } catch {
+            isCorrect = false;
+            correctAnswerValue = question.correct_answer;
+          }
+        }
+      }
+
+      detailedQuestions.push({
+        question_id: question.id,
+        question_text: question.question_text,
+        question_type: question.question_type,
+        subject: question.subject,
+        topic: question.topic,
+        difficulty: question.difficulty,
+        marks: question.marks,
+        negative_marks: question.negative_marks,
+        options: question.options || [],
+        user_answer: userAnswer,
+        correct_answer: correctAnswerValue,
+        is_correct: isCorrect,
+        status: questionStatus,
+        explanation: question.explanation
+      });
+    }
+
+    res.json({
+      session_id: sessionId,
+      result_summary: result,
+      questions: detailedQuestions
+    });
+  } catch (error) {
+    console.error('Get detailed results error:', error);
+    res.status(500).json({ detail: 'Failed to fetch detailed results' });
+  }
+});
+
 // Admin Analytics Routes
 app.get('/api/admin/analytics/overview', authenticate, requireAdmin, async (req, res) => {
   try {
