@@ -41,6 +41,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 dump.rdb
+*.log
+backend.log
+server.log
+frontend.log
 
 # System files
 .DS_Store
@@ -77,4 +81,19 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
-android-sdk/ 
+android-sdk/
+
+# CSV temp files and test files
+*_converted.csv
+*_fixed.csv
+*working_questions.csv
+test_*.js
+test_*.md
+fix_*.js
+
+# Emergent/deployment configs (if not needed)
+.emergent/
+
+# Temporary files
+*.tmp
+*.temp

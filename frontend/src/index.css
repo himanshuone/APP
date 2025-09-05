@@ -82,5 +82,106 @@ code {
     }
   body {
     @apply bg-background text-foreground;
+    transition: background-color 0.3s ease, color 0.3s ease;
     }
+}
+
+/* Enhanced Pure Black Dark Mode */
+.dark {
+  color-scheme: dark;
+}
+
+.dark body {
+  background-color: #000000 !important;
+  color: #fafafa !important;
+}
+
+.dark * {
+  border-color: hsl(0 0% 12%) !important;
+}
+
+/* Dark mode component overrides */
+.dark [data-radix-popper-content-wrapper] {
+  background-color: #000000 !important;
+}
+
+.dark .bg-white {
+  background-color: #000000 !important;
+}
+
+.dark .bg-gray-50 {
+  background-color: #000000 !important;
+}
+
+.dark .bg-gray-100 {
+  background-color: #0a0a0a !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #0a0a0a !important;
+}
+
+.dark .text-slate-900 {
+  color: #fafafa !important;
+}
+
+.dark .text-gray-900 {
+  color: #fafafa !important;
+}
+
+.dark .border-gray-200 {
+  border-color: #1a1a1a !important;
+}
+
+.dark .border-slate-200 {
+  border-color: #1a1a1a !important;
+}
+
+/* Dark mode gradients */
+.dark .bg-gradient-to-br {
+  background: linear-gradient(to bottom right, #000000, #1a1a1a) !important;
+}
+
+/* Dark mode cards and containers */
+.dark .bg-white\/10 {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.dark .border-white\/20 {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Enhanced scrollbar for dark mode */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #000000;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 4px;
+  border: 1px solid #000000;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+}
+
+.dark ::-webkit-scrollbar-corner {
+  background: #000000;
+}
+
+/* Selection colors for dark mode */
+.dark ::selection {
+  background-color: #333333;
+  color: #ffffff;
+}
+
+.dark ::-moz-selection {
+  background-color: #333333;
+  color: #ffffff;
 }

@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "/Users/himanshukumar/Documents/Github/APP-1/backend/server.py", line 1, in <module>
-    from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-ModuleNotFoundError: No module named 'fastapi'
