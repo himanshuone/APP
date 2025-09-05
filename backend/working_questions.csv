@@ -1,0 +1,8 @@
+question_text,question_type,subject,topic,option_1,option_1_correct,option_2,option_2_correct,option_3,option_3_correct,option_4,option_4_correct,marks,negative_marks,explanation,correct_answer
+The word ephemeral is closest in meaning to:,MCQ,General Aptitude,Verbal Ability,Eternal,false,Temporary,true,Painful,false,Important,false,1,0.33,Ephemeral means lasting for a very short time,
+A shopkeeper buys 20 pens for 200. He sells them at a profit of 20%. What is the selling price of one pen?,NAT,General Aptitude,Arithmetic,"","","","","","","","",1,0.33,Cost per pen = 200/20 = 10. Selling price = 10 + 20% = 12,12
+If 5 men can complete a work in 10 days how many men are needed to finish the same work in 2 days?,MCQ,General Aptitude,Time and Work,10,false,15,false,20,false,25,true,1,0.33,Work = 5*10 = 50 man-days. For 2 days: 50/2 = 25 men,
+Which of the following numbers are divisible by 9?,MSQ,General Aptitude,Number System,135,true,231,false,729,true,1026,true,2,0.66,Divisible by 9 if sum of digits is divisible by 9,
+What is the time complexity of binary search?,MCQ,Computer Science,Algorithms,O(n),false,O(log n),true,O(n²),false,O(1),false,2,0.66,Binary search divides search space in half,
+Which data structure follows LIFO?,MCQ,Computer Science,Data Structures,Queue,false,Stack,true,Array,false,Tree,false,1,0.33,Stack follows Last In First Out principle,
+What is 25 + 15?,NAT,Mathematics,Arithmetic,"","","","","","","","",1,0,Simple addition,40

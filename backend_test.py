@@ -13,7 +13,7 @@ from datetime import datetime
 import time
 
 class GATEExamAPITester:
-    def __init__(self, base_url="https://gate-prep-hub-2.preview.emergentagent.com"):
+    def __init__(self, base_url="http://localhost:8001"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.admin_token = None

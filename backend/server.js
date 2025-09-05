@@ -29,10 +29,13 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting
+// Rate limiting - More permissive for exam functionality
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 200, // limit each IP to 200 requests per minute
+  message: { detail: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false
 });
 app.use('/api/', limiter);
 
@@ -365,9 +368,40 @@ app.post('/api/admin/upload/csv', authenticate, requireAdmin, upload.single('fil
     const errors = [];
     let questionsAdded = 0;
 
-    // Parse CSV
-    const rows = csvData.split('\n').map(row => row.split(','));
+    // Parse CSV - Better handling of quoted fields
+    const rows = [];
+    const lines = csvData.split('\n');
+    
+    for (const line of lines) {
+      if (line.trim()) {
+        // Simple CSV parser that handles quoted fields
+        const row = [];
+        let currentField = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            row.push(currentField.trim());
+            currentField = '';
+          } else {
+            currentField += char;
+          }
+        }
+        row.push(currentField.trim()); // Add the last field
+        rows.push(row);
+      }
+    }
+    
+    if (rows.length === 0) {
+      return res.status(400).json({ detail: 'CSV file is empty' });
+    }
+    
     const headers = rows[0].map(h => h.trim());
+    console.log('CSV Headers:', headers);
     
     for (let i = 1; i < rows.length; i++) {
       if (rows[i].length < headers.length) continue;
@@ -375,31 +409,47 @@ app.post('/api/admin/upload/csv', authenticate, requireAdmin, upload.single('fil
       try {
         const row = {};
         headers.forEach((header, index) => {
-          row[header] = rows[i][index] ? rows[i][index].trim() : '';
+          row[header] = rows[i][index] ? rows[i][index].trim().replace(/^"|"$/g, '') : '';
         });
 
-        if (!row.question_text) continue;
+        console.log('Processing row:', row);
+        
+        if (!row.question_text) {
+          console.log('Skipping row - no question text');
+          continue;
+        }
 
-        // Parse question type
-        const questionType = (row.type || 'MCQ').toUpperCase();
+        // Parse question type - check both 'type' and 'question_type'
+        const questionType = (row.question_type || row.type || 'MCQ').toUpperCase();
         if (!Object.values(QuestionType).includes(questionType)) {
           throw new Error(`Invalid question type: ${questionType}`);
         }
 
         // Parse options for MCQ/MSQ
         const options = [];
+        let correctAnswer = null;
+        
         if ([QuestionType.MCQ, QuestionType.MSQ].includes(questionType)) {
           for (let j = 1; j <= 4; j++) {
             const optionText = row[`option_${j}`];
-            if (optionText) {
-              const isCorrect = ['true', '1', 'yes'].includes(
-                (row[`option_${j}_correct`] || '').toLowerCase()
-              );
+            if (optionText && optionText.trim() !== '') {
+              // Handle both 'true/false' and 'TRUE/FALSE' formats
+              const correctValue = (row[`option_${j}_correct`] || '').toLowerCase();
+              const isCorrect = ['true', '1', 'yes'].includes(correctValue);
+              
+              const optionId = require('crypto').randomUUID();
               options.push({
+                id: optionId,
                 text: optionText,
                 is_correct: isCorrect
               });
             }
+          }
+        } else if (questionType === QuestionType.NAT) {
+          // For NAT questions, check if answer is provided in option_1 or correct_answer field
+          correctAnswer = row.correct_answer || row.option_1 || null;
+          if (correctAnswer) {
+            correctAnswer = parseFloat(correctAnswer) || correctAnswer;
           }
         }
 
@@ -408,15 +458,17 @@ app.post('/api/admin/upload/csv', authenticate, requireAdmin, upload.single('fil
           question_text: row.question_text,
           question_type: questionType,
           subject: row.subject || 'General',
-          topic: row.topic || 'General',
+          topic: row.topic || 'General', 
           difficulty: row.difficulty || 'medium',
           marks: parseFloat(row.marks || 1.0),
           negative_marks: parseFloat(row.negative_marks || 0.33),
           options,
-          correct_answer: row.correct_answer,
-          explanation: row.explanation,
+          correct_answer: correctAnswer || row.correct_answer,
+          explanation: row.explanation || '',
           created_by: req.user.id
         };
+        
+        console.log('Question data to save:', JSON.stringify(questionData, null, 2));
 
         const question = new Question(questionData);
         await question.save();

@@ -1,0 +1,11 @@
+question_text,question_type,subject,topic,option_1,option_1_correct,option_2,option_2_correct,option_3,option_3_correct,option_4,option_4_correct,marks,negative_marks,explanation,correct_answer
+"The word 'ephemeral' is closest in meaning to:",MCQ,General Aptitude,Verbal Ability,Eternal,false,Temporary,true,Painful,false,Important,false,1,0.33,"Ephemeral means lasting for a very short time",
+"A shopkeeper buys 20 pens for 200. He sells them at a profit of 20%. What is the selling price of one pen?",NAT,General Aptitude,Arithmetic,"","","","","","","","",1,0.33,"Cost per pen = 200/20 = 10. Selling price = 10 + 20% = 12",12
+"If 5 men can complete a work in 10 days, how many men are needed to finish the same work in 2 days?",MCQ,General Aptitude,Time and Work,10,false,15,false,20,false,25,true,1,0.33,"Work = 5*10 = 50 man-days. For 2 days: 50/2 = 25 men",
+"Which of the following numbers are divisible by 9?",MSQ,General Aptitude,Number System,135,true,231,false,729,true,1026,true,2,0.66,"Divisible by 9 if sum of digits is divisible by 9",
+"If x is 20% more than y, then y is what % less than x?",MCQ,General Aptitude,Percentage,16.67%,true,20%,false,25%,false,30%,false,1,0.33,"If x = 1.2y, then y = x/1.2 = 0.833x, so 16.67% less",
+"A dice is rolled 4 times. Find the probability of getting '6' exactly 2 times.",NAT,General Aptitude,Probability,"","","","","","","","",2,0.66,"Binomial probability: C(4,2) * (1/6)^2 * (5/6)^2",0.1157
+"Find the next number in sequence: 2, 6, 12, 20?",MCQ,General Aptitude,Series,28,false,30,true,32,false,36,false,1,0.33,"Pattern: n(n+1) for n=1,2,3,4. Next is 5*6=30",
+"If SPEED is coded as 17162520, how is GATE coded?",MCQ,General Aptitude,Coding and Decoding,714520,true,714205,false,71425,false,1714205,false,1,0.33,"A=1, B=2, etc. G=7, A=1, T=20, E=5",
+"The sum of first 25 even natural numbers = ?",NAT,General Aptitude,Series,"","","","","","","","",1,0.33,"Sum = n(n+1) where n=25. 25*26 = 650",650
+"Which of the following is the correct inference: 'All roses are flowers, some flowers fade quickly'?",MCQ,General Aptitude,Syllogism,"All roses fade quickly",false,"Some flowers are roses",true,"Some flowers do not fade quickly",true,None,false,2,0.66,"From given statements, we can infer some flowers are roses",

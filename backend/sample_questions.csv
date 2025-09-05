@@ -1,0 +1,4 @@
+question_text,question_type,subject,topic,option_1,option_1_correct,option_2,option_2_correct,option_3,option_3_correct,option_4,option_4_correct,marks,negative_marks,explanation
+"What is the time complexity of binary search?",MCQ,Computer Science,Algorithms,"O(n)",false,"O(log n)",true,"O(n²)",false,"O(1)",false,2,0.66,"Binary search divides search space in half"
+"Which data structure follows LIFO?",MCQ,Computer Science,Data Structures,"Queue",false,"Stack",true,"Array",false,"Tree",false,1,0.33,"Stack follows Last In First Out principle"
+"What is 25 + 15?",NAT,Mathematics,Arithmetic,"","","","","","","","",1,0,"Simple addition"

@@ -56,6 +56,11 @@ class QuestionStatus(str, Enum):
     MARKED = "marked"
     MARKED_ANSWERED = "marked_answered"
 
+class QuestionSource(str, Enum):
+    ADMIN = "admin"
+    STUDENT = "student"
+    SHARED = "shared"
+
 # User Models
 class UserCreate(BaseModel):
     email: str
@@ -99,6 +104,9 @@ class Question(BaseModel):
     explanation: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str
+    source: QuestionSource = QuestionSource.ADMIN
+    shared_with: List[str] = []  # List of user IDs who can see this question
+    is_public: bool = False  # If true, visible to all users
 
 class QuestionCreate(BaseModel):
     question_text: str
@@ -111,6 +119,8 @@ class QuestionCreate(BaseModel):
     options: List[QuestionOption] = []
     correct_answer: Optional[Union[str, float, List[str]]] = None
     explanation: Optional[str] = None
+    source: QuestionSource = QuestionSource.ADMIN
+    is_public: bool = False
 
 # Exam Models
 class ExamConfig(BaseModel):
@@ -154,6 +164,11 @@ class ExamResult(BaseModel):
     subject_wise_score: Dict[str, Dict[str, Any]]
     time_taken_minutes: int
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class ShareQuestionRequest(BaseModel):
+    question_id: str
+    recipient_emails: List[str]
+    message: Optional[str] = None
 
 # Helper Functions
 def verify_password(plain_password, hashed_password):
@@ -320,11 +335,14 @@ async def upload_csv_questions(
                 negative_marks=float(row.get('negative_marks', 0.33)),
                 options=options,
                 correct_answer=row.get('correct_answer'),
-                explanation=row.get('explanation')
+                explanation=row.get('explanation'),
+                source=QuestionSource.ADMIN,
+                is_public=True
             )
             
             question_dict = question_data.dict()
             question_dict["created_by"] = current_user.id
+            question_dict["shared_with"] = []  # Initialize empty shared list
             question = Question(**question_dict)
             
             await db.questions.insert_one(question.dict())
@@ -337,6 +355,100 @@ async def upload_csv_questions(
         "message": f"Successfully added {questions_added} questions",
         "errors": errors if errors else None
     }
+
+@api_router.post("/questions", response_model=Question)
+async def create_student_question(
+    question_data: QuestionCreate,
+    current_user: User = Depends(get_current_user)
+):
+    # Set source as student for non-admin users
+    if current_user.role != UserRole.ADMIN:
+        question_data.source = QuestionSource.STUDENT
+    
+    question_dict = question_data.dict()
+    question_dict["created_by"] = current_user.id
+    question_dict["shared_with"] = []  # Initialize empty shared list
+    question = Question(**question_dict)
+    
+    await db.questions.insert_one(question.dict())
+    return question
+
+@api_router.post("/questions/{question_id}/share")
+async def share_question(
+    question_id: str,
+    share_request: ShareQuestionRequest,
+    current_user: User = Depends(get_current_user)
+):
+    # Get the question
+    question = await db.questions.find_one({"id": question_id})
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    # Check if user owns this question or is admin
+    if question["created_by"] != current_user.id and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="You can only share your own questions")
+    
+    # Find recipient users by email
+    recipient_ids = []
+    for email in share_request.recipient_emails:
+        recipient = await db.users.find_one({"email": email})
+        if recipient:
+            recipient_ids.append(recipient["id"])
+    
+    if not recipient_ids:
+        raise HTTPException(status_code=400, detail="No valid recipients found")
+    
+    # Update question with shared recipients
+    current_shared = question.get("shared_with", [])
+    new_shared = list(set(current_shared + recipient_ids))
+    
+    await db.questions.update_one(
+        {"id": question_id},
+        {"$set": {"shared_with": new_shared}}
+    )
+    
+    return {
+        "message": f"Question shared with {len(recipient_ids)} user(s)",
+        "shared_with": len(new_shared)
+    }
+
+@api_router.get("/questions")
+async def get_user_questions(
+    current_user: User = Depends(get_current_user)
+):
+    # Build query for questions visible to user
+    query = {
+        "$or": [
+            {"created_by": current_user.id},  # Own questions
+            {"shared_with": current_user.id},  # Shared with user
+            {"is_public": True},  # Public questions
+        ]
+    }
+    
+    # Admins can see all questions
+    if current_user.role == UserRole.ADMIN:
+        query = {}
+    
+    questions = await db.questions.find(query).to_list(length=None)
+    
+    # Add metadata to questions
+    for question in questions:
+        if question.get("created_by") == current_user.id:
+            question["user_relation"] = "own"
+        elif current_user.id in question.get("shared_with", []):
+            question["user_relation"] = "shared"
+        elif question.get("is_public", False):
+            question["user_relation"] = "public"
+        else:
+            question["user_relation"] = "admin"
+            
+        # Get creator info for display
+        creator = await db.users.find_one({"id": question["created_by"]})
+        if creator:
+            question["creator_name"] = creator["full_name"]
+            question["creator_email"] = creator["email"]
+    
+    return questions
 
 @api_router.post("/admin/upload/pdf")
 async def upload_pdf_questions(
@@ -420,12 +532,9 @@ async def start_exam(
             detail="Not enough questions available for this exam"
         )
     
-    # Select and randomize questions if needed
+    # Always randomize questions to ensure different experience on retakes
     import random
-    if exam_config["randomize_questions"]:
-        selected_questions = random.sample(all_questions, exam_config["total_questions"])
-    else:
-        selected_questions = all_questions[:exam_config["total_questions"]]
+    selected_questions = random.sample(all_questions, exam_config["total_questions"])
     
     question_ids = [q["id"] for q in selected_questions]
     
@@ -656,6 +765,210 @@ async def get_exam_result(
         raise HTTPException(status_code=404, detail="Result not found")
     
     return ExamResult(**result)
+
+@api_router.get("/exam-history")
+async def get_user_exam_history(
+    current_user: User = Depends(get_current_user)
+):
+    # Get all completed sessions for the user
+    sessions = await db.exam_sessions.find({
+        "user_id": current_user.id,
+        "submitted": True
+    }).to_list(length=None)
+    
+    history = []
+    for session in sessions:
+        # Get exam config details
+        exam_config = await db.exam_configs.find_one({"id": session["exam_config_id"]})
+        if not exam_config:
+            continue
+        
+        # Get result
+        result = await db.exam_results.find_one({"exam_session_id": session["id"]})
+        if not result:
+            continue
+        
+        history.append({
+            "session_id": session["id"],
+            "exam_config_id": session["exam_config_id"],
+            "exam_name": exam_config["name"],
+            "exam_description": exam_config["description"],
+            "completed_at": session.get("end_time", session["created_at"]),
+            "score": result["score"],
+            "percentage": result["percentage"],
+            "correct": result["correct"],
+            "total_questions": result["total_questions"],
+            "time_taken_minutes": result["time_taken_minutes"]
+        })
+    
+    return history
+
+@api_router.get("/detailed-results/{session_id}")
+async def get_detailed_exam_results(
+    session_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    # Get the exam session
+    session = await db.exam_sessions.find_one({
+        "id": session_id,
+        "user_id": current_user.id
+    })
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Get exam result
+    result = await db.exam_results.find_one({"exam_session_id": session_id})
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    
+    detailed_questions = []
+    
+    for i, question_id in enumerate(session["questions"]):
+        question = await db.questions.find_one({"id": question_id})
+        if not question:
+            continue
+            
+        user_answer = session.get("answers", {}).get(question_id)
+        question_status = session.get("question_status", {}).get(question_id, "not_answered")
+        
+        # Determine if answer is correct
+        is_correct = False
+        correct_answer = None
+        
+        if question["question_type"] == QuestionType.MCQ:
+            correct_options = [opt for opt in question["options"] if opt["is_correct"]]
+            correct_answer = correct_options[0]["text"] if correct_options else None
+            if user_answer:
+                is_correct = user_answer in [opt["id"] for opt in correct_options]
+        elif question["question_type"] == QuestionType.MSQ:
+            correct_options = [opt for opt in question["options"] if opt["is_correct"]]
+            correct_answer = ", ".join([opt["text"] for opt in correct_options])
+            if user_answer and isinstance(user_answer, list):
+                correct_ids = set([opt["id"] for opt in correct_options])
+                user_ids = set(user_answer)
+                is_correct = user_ids == correct_ids
+        elif question["question_type"] == QuestionType.NAT:
+            correct_answer = question.get("correct_answer")
+            if user_answer:
+                try:
+                    is_correct = float(user_answer) == float(correct_answer)
+                except:
+                    is_correct = False
+        
+        # Get user's answer text
+        user_answer_text = None
+        if user_answer:
+            if question["question_type"] in [QuestionType.MCQ, QuestionType.MSQ]:
+                if isinstance(user_answer, list):
+                    selected_options = [opt for opt in question["options"] if opt["id"] in user_answer]
+                    user_answer_text = ", ".join([opt["text"] for opt in selected_options])
+                else:
+                    selected_option = next((opt for opt in question["options"] if opt["id"] == user_answer), None)
+                    user_answer_text = selected_option["text"] if selected_option else "Unknown"
+            else:
+                user_answer_text = str(user_answer)
+        
+        detailed_questions.append({
+            "question_number": i + 1,
+            "question_id": question_id,
+            "question_text": question["question_text"],
+            "question_type": question["question_type"],
+            "subject": question["subject"],
+            "topic": question["topic"],
+            "marks": question["marks"],
+            "options": question.get("options", []),
+            "user_answer": user_answer,
+            "user_answer_text": user_answer_text,
+            "correct_answer": correct_answer,
+            "is_correct": is_correct,
+            "status": question_status,
+            "explanation": question.get("explanation")
+        })
+    
+    return {
+        "session_id": session_id,
+        "total_questions": len(detailed_questions),
+        "questions": detailed_questions,
+        "overall_result": {
+            "score": result["score"],
+            "percentage": result["percentage"],
+            "correct": result["correct"],
+            "incorrect": result["incorrect"],
+            "attempted": result["attempted"]
+        }
+    }
+
+@api_router.post("/admin/preview-csv")
+async def preview_csv_questions(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_admin_user)
+):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+    
+    contents = await file.read()
+    csv_data = io.StringIO(contents.decode('utf-8'))
+    csv_reader = csv.DictReader(csv_data)
+    
+    preview_questions = []
+    headers = csv_reader.fieldnames or []
+    row_count = 0
+    
+    for row_num, row in enumerate(csv_reader, start=2):
+        if row_count >= 10:  # Limit preview to 10 rows
+            break
+            
+        try:
+            # Parse question type
+            question_type = QuestionType(row.get('type', 'MCQ').upper())
+            
+            # Parse options for MCQ/MSQ
+            options = []
+            if question_type in [QuestionType.MCQ, QuestionType.MSQ]:
+                for i in range(1, 5):  # Support up to 4 options
+                    option_text = row.get(f'option_{i}', '').strip()
+                    if option_text:
+                        is_correct = row.get(f'option_{i}_correct', '').lower() in ['true', '1', 'yes']
+                        options.append({
+                            'text': option_text,
+                            'is_correct': is_correct
+                        })
+            
+            preview_questions.append({
+                'row_number': row_num,
+                'question_text': row.get('question_text', ''),
+                'question_type': question_type.value,
+                'subject': row.get('subject', 'General'),
+                'topic': row.get('topic', 'General'),
+                'difficulty': row.get('difficulty', 'medium'),
+                'marks': float(row.get('marks', 1.0)),
+                'options': options,
+                'correct_answer': row.get('correct_answer'),
+                'explanation': row.get('explanation', ''),
+                'raw_row': dict(row)  # Include raw CSV row data
+            })
+            row_count += 1
+            
+        except Exception as e:
+            preview_questions.append({
+                'row_number': row_num,
+                'error': str(e),
+                'raw_row': dict(row)
+            })
+            row_count += 1
+    
+    # Get total row count
+    csv_data.seek(0)
+    total_rows = sum(1 for _ in csv.DictReader(csv_data)) 
+    
+    return {
+        'headers': headers,
+        'preview_questions': preview_questions,
+        'total_rows': total_rows,
+        'showing_rows': min(10, total_rows),
+        'filename': file.filename
+    }
 
 # Include the router in the main app
 app.include_router(api_router)
