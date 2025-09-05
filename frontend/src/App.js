@@ -541,11 +541,11 @@ const Dashboard = () => {
                   <CardContent>
                     <div className="space-y-3">
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-600 dark:text-blue-200">Questions:</span>
+                        <span className="text-gray-600 dark:text-gray-400">Questions:</span>
                         <span className="font-medium dark:text-white">{exam.total_questions}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-600 dark:text-blue-200">Subjects:</span>
+                        <span className="text-gray-600 dark:text-gray-400">Subjects:</span>
                         <span className="font-medium dark:text-white">{exam.subjects.join(', ')}</span>
                       </div>
                       <Button 
