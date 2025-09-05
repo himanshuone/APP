@@ -596,10 +596,6 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">GATE Exam Dashboard</h2>
-          <p className="text-gray-600 dark:text-gray-400">Track your progress and continue your GATE preparation</p>
-        </div>
 
         {/* Admin Analytics Section */}
         {user?.role === 'admin' && (
@@ -1473,7 +1469,6 @@ const StudentQuestionBank = () => {
   const [quizAnswers, setQuizAnswers] = useState({}); // Store user answers for quiz mode
   const [quizResults, setQuizResults] = useState({}); // Store quiz results (correct/incorrect)
   const [showCreateExamFromGenerated, setShowCreateExamFromGenerated] = useState(false);
-  const [shareMethod, setShareMethod] = useState('email'); // 'email' or 'link'
   const [shareLink, setShareLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -1558,33 +1553,14 @@ const StudentQuestionBank = () => {
     }
 
     try {
-      let requestData = {
-        share_method: shareMethod
-      };
-
-      if (shareMethod === 'email') {
-        if (!shareEmails.trim()) {
-          toast.error('Please enter recipient emails');
-          return;
-        }
-        const emails = shareEmails.split(',').map(email => email.trim()).filter(email => email);
-        requestData.recipient_emails = emails;
-      }
-
-      const response = await axios.post(`${API}/questions/${selectedQuestion.id}/share`, requestData);
+      const response = await axios.post(`${API}/questions/${selectedQuestion.id}/share`, {
+        share_method: 'link'
+      });
       
-      if (shareMethod === 'link') {
-        setShareLink(response.data.share_link);
-        toast.success('Share link generated successfully!');
-      } else {
-        toast.success(`Question shared with ${response.data.emails_sent} recipient(s)!`);
-        setShowShareDialog(false);
-        setShareEmails('');
-        setSelectedQuestion(null);
-        setShareMethod('email');
-      }
+      setShareLink(response.data.share_link);
+      toast.success('Share link generated successfully!');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to share question');
+      toast.error(error.response?.data?.detail || 'Failed to generate share link');
     }
   };
 
@@ -1914,8 +1890,13 @@ const StudentQuestionBank = () => {
       return;
     }
     
-    setSelectedQuestionsForBulkShare(myQuestions);
-    setShowBulkShareDialog(true);
+    toast.info(
+      <div>
+        <p className="font-medium mb-2">Bulk sharing tip:</p>
+        <p className="text-sm">Share individual questions using the Share button on each question card to generate unique links.</p>
+      </div>,
+      { duration: 5000 }
+    );
   };
 
   const handleBulkShareSubmit = async () => {
@@ -2151,54 +2132,84 @@ const StudentQuestionBank = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">My Question Collection</h2>
-            <div className="flex space-x-2">
+          <div className="flex flex-col space-y-4 mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">My Question Collection</h2>
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
               {aiStatus?.available && (
                 <>
                   <Button 
                     variant="outline"
                     size="sm"
                     onClick={() => setShowAiTutor(true)}
-                    className="bg-gradient-to-r from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 border-purple-200"
+                    className="bg-gradient-to-r from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 border-purple-200 w-full sm:w-auto"
                   >
                     <Bot className="h-4 w-4 mr-2" />
-                    AI Tutor
+                    <span className="hidden sm:inline">AI Tutor</span>
+                    <span className="sm:hidden">Tutor</span>
                   </Button>
                   <Button 
                     variant="outline"
                     size="sm"
                     onClick={() => setShowAiGenerator(true)}
-                    className="bg-gradient-to-r from-emerald-50 to-emerald-100 hover:from-emerald-100 hover:to-emerald-200 border-emerald-200"
+                    className="bg-gradient-to-r from-emerald-50 to-emerald-100 hover:from-emerald-100 hover:to-emerald-200 border-emerald-200 w-full sm:w-auto"
                   >
                     <Sparkles className="h-4 w-4 mr-2" />
-                    AI Generate
+                    <span className="hidden sm:inline">AI Generate</span>
+                    <span className="sm:hidden">Generate</span>
                   </Button>
                 </>
               )}
               <Button 
                 onClick={() => setShowCreateForm(true)}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 w-full sm:w-auto"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Create Question
+                <span className="hidden sm:inline">Create Question</span>
+                <span className="sm:hidden">Create</span>
               </Button>
             </div>
           </div>
           
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className={`grid w-full ${user?.role === 'admin' ? 'grid-cols-6' : 'grid-cols-4'}`}>
-              <TabsTrigger value="my-questions">My Questions</TabsTrigger>
-              <TabsTrigger value="shared-with-me">Shared with Me</TabsTrigger>
-              <TabsTrigger value="all-questions">All Questions</TabsTrigger>
-              <TabsTrigger value="my-exams">My Exams</TabsTrigger>
-              {user?.role === 'admin' && (
-                <>
-                  <TabsTrigger value="upload-csv">Upload CSV</TabsTrigger>
-                  <TabsTrigger value="manage">Manage</TabsTrigger>
-                </>
-              )}
-            </TabsList>
+            {/* Mobile-friendly scrollable tabs */}
+            <div className="w-full overflow-x-auto pb-2">
+              <TabsList className="inline-flex w-max min-w-full">
+                <TabsTrigger value="my-questions" className="whitespace-nowrap px-3 py-2 text-sm">
+                  <FileText className="h-4 w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">My Questions</span>
+                  <span className="sm:hidden">Mine</span>
+                </TabsTrigger>
+                <TabsTrigger value="shared-with-me" className="whitespace-nowrap px-3 py-2 text-sm">
+                  <Share2 className="h-4 w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Shared with Me</span>
+                  <span className="sm:hidden">Shared</span>
+                </TabsTrigger>
+                <TabsTrigger value="all-questions" className="whitespace-nowrap px-3 py-2 text-sm">
+                  <BookOpen className="h-4 w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">All Questions</span>
+                  <span className="sm:hidden">All</span>
+                </TabsTrigger>
+                <TabsTrigger value="my-exams" className="whitespace-nowrap px-3 py-2 text-sm">
+                  <BarChart className="h-4 w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">My Exams</span>
+                  <span className="sm:hidden">Exams</span>
+                </TabsTrigger>
+                {user?.role === 'admin' && (
+                  <>
+                    <TabsTrigger value="upload-csv" className="whitespace-nowrap px-3 py-2 text-sm">
+                      <Upload className="h-4 w-4 mr-1 sm:mr-2" />
+                      <span className="hidden sm:inline">Upload CSV</span>
+                      <span className="sm:hidden">Upload</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="manage" className="whitespace-nowrap px-3 py-2 text-sm">
+                      <Settings className="h-4 w-4 mr-1 sm:mr-2" />
+                      <span className="hidden sm:inline">Manage</span>
+                      <span className="sm:hidden">Manage</span>
+                    </TabsTrigger>
+                  </>
+                )}
+              </TabsList>
+            </div>
 
             {/* My Questions Tab */}
             <TabsContent value="my-questions" className="mt-6">
@@ -2258,40 +2269,45 @@ const StudentQuestionBank = () => {
                 {/* Enhanced Questions List with Action Buttons */}
                 <Card>
                   <CardHeader>
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col space-y-4 lg:flex-row lg:justify-between lg:items-center lg:space-y-0">
                       <div>
-                        <CardTitle className="text-green-700 dark:text-green-300">📝 Questions I Created</CardTitle>
-                        <CardDescription>
+                        <CardTitle className="text-green-700 dark:text-green-300 text-lg">📝 Questions I Created</CardTitle>
+                        <CardDescription className="text-sm">
                           Manage, share, and organize your personal question collection
                         </CardDescription>
                       </div>
-                      <div className="flex space-x-2">
+                      <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
                         <Button 
                           variant="outline" 
                           size="sm"
                           onClick={handlePreviewAll}
+                          className="w-full sm:w-auto"
                         >
                           <Eye className="h-4 w-4 mr-2" />
-                          Preview All
+                          <span className="hidden sm:inline">Preview All</span>
+                          <span className="sm:hidden">Preview</span>
                         </Button>
                         <Button 
                           variant="outline" 
                           size="sm"
                           onClick={handleBulkShare}
                           disabled={getQuestionsByType('my-questions').length === 0}
+                          className="w-full sm:w-auto"
                         >
                           <Share2 className="h-4 w-4 mr-2" />
-                          Bulk Share
+                          <span className="hidden sm:inline">Bulk Share</span>
+                          <span className="sm:hidden">Share</span>
                         </Button>
                         <Button 
                           variant="default" 
                           size="sm"
                           onClick={() => setShowCreateExamDialog(true)}
                           disabled={getQuestionsByType('my-questions').length === 0}
-                          className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                          className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 w-full sm:w-auto"
                         >
                           <Plus className="h-4 w-4 mr-2" />
-                          Create Exam
+                          <span className="hidden sm:inline">Create Exam</span>
+                          <span className="sm:hidden">Exam</span>
                         </Button>
                       </div>
                     </div>
@@ -2959,161 +2975,106 @@ const StudentQuestionBank = () => {
           />
         )}
 
-        {/* Share Dialog */}
+        {/* Share Dialog - Link Only */}
         <Dialog open={showShareDialog} onOpenChange={(open) => {
           if (!open) {
             setShowShareDialog(false);
-            setShareEmails('');
-            setShareMethod('email');
             setShareLink('');
             setLinkCopied(false);
           }
         }}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle className="flex items-center">
-                <Share2 className="h-5 w-5 mr-2 text-blue-600" />
+                <Share2 className="h-5 w-5 mr-2 text-emerald-600" />
                 Share Question
               </DialogTitle>
               <DialogDescription>
-                Share this question via email or generate a shareable link
+                Generate a shareable link that anyone can use to view this question
               </DialogDescription>
             </DialogHeader>
             
             <div className="space-y-6">
-              {/* Sharing Method Selection */}
-              <div className="space-y-3">
-                <Label className="text-base font-medium">Sharing Method</Label>
-                <Tabs value={shareMethod} onValueChange={setShareMethod} className="w-full">
-                  <TabsList className="grid grid-cols-2 w-full">
-                    <TabsTrigger value="email" className="flex items-center space-x-2">
-                      <span className="text-base">📧</span>
-                      <span>Send via Email</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="link" className="flex items-center space-x-2">
-                      <span className="text-base">🔗</span>
-                      <span>Generate Link</span>
-                    </TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="email" className="mt-4 space-y-4">
-                    <div>
-                      <Label htmlFor="share-emails" className="text-sm font-medium">
-                        Recipient Email Addresses
+              {selectedQuestion && (
+                <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                  <h4 className="font-medium text-emerald-900 mb-2">Question to Share:</h4>
+                  <p className="text-sm text-emerald-800 mb-3">
+                    {selectedQuestion.question_text.length > 150 
+                      ? selectedQuestion.question_text.substring(0, 150) + '...' 
+                      : selectedQuestion.question_text}
+                  </p>
+                  <div className="flex space-x-2">
+                    <Badge className="bg-emerald-100 text-emerald-800">{selectedQuestion.subject}</Badge>
+                    <Badge className="bg-emerald-100 text-emerald-800">{selectedQuestion.question_type}</Badge>
+                    <Badge className="bg-emerald-100 text-emerald-800">{selectedQuestion.marks} marks</Badge>
+                  </div>
+                </div>
+              )}
+              
+              <div className="text-center">
+                {!shareLink ? (
+                  <div className="py-6">
+                    <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Share2 className="h-8 w-8 text-emerald-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                      Ready to Share?
+                    </h3>
+                    <p className="text-slate-600 text-sm">
+                      Generate a public link that works for 30 days
+                    </p>
+                  </div>
+                ) : (
+                  <div className="py-4">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle className="h-8 w-8 text-green-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-green-900 mb-2">
+                      Link Ready to Share!
+                    </h3>
+                    <p className="text-green-700 text-sm mb-4">
+                      Copy this link and share it with anyone
+                    </p>
+                    
+                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                        Shareable Link (expires in 30 days)
                       </Label>
-                      <Textarea
-                        id="share-emails"
-                        value={shareEmails}
-                        onChange={(e) => setShareEmails(e.target.value)}
-                        placeholder="Enter email addresses separated by commas...\ne.g., john@example.com, jane@example.com"
-                        className="mt-2 min-h-[100px]"
-                        rows={4}
-                      />
-                      <p className="text-sm text-slate-500 mt-1">
-                        Recipients will receive an email with the question and a link to practice
-                      </p>
+                      <div className="flex items-center space-x-2">
+                        <Input 
+                          value={shareLink} 
+                          readOnly 
+                          className="font-mono text-sm flex-1"
+                          onClick={(e) => e.target.select()}
+                        />
+                        <Button 
+                          onClick={handleCopyLink}
+                          variant="outline"
+                          size="sm"
+                          className={linkCopied ? 'bg-green-50 text-green-700 border-green-300' : ''}
+                        >
+                          {linkCopied ? (
+                            <>
+                              <Check className="h-4 w-4 mr-1" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Share2 className="h-4 w-4 mr-1" />
+                              Copy
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                     
-                    {selectedQuestion && (
-                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <h4 className="font-medium text-blue-900 mb-2">Question to Share:</h4>
-                        <p className="text-sm text-blue-800 mb-2">
-                          {selectedQuestion.question_text.length > 150 
-                            ? selectedQuestion.question_text.substring(0, 150) + '...' 
-                            : selectedQuestion.question_text}
-                        </p>
-                        <div className="flex space-x-2">
-                          <Badge className="bg-blue-100 text-blue-800">{selectedQuestion.subject}</Badge>
-                          <Badge className="bg-blue-100 text-blue-800">{selectedQuestion.question_type}</Badge>
-                        </div>
-                      </div>
-                    )}
-                  </TabsContent>
-                  
-                  <TabsContent value="link" className="mt-4 space-y-4">
-                    <div className="text-center py-6">
-                      {!shareLink ? (
-                        <div>
-                          <div className="mb-4">
-                            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                              <span className="text-2xl">🔗</span>
-                            </div>
-                            <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                              Generate Shareable Link
-                            </h3>
-                            <p className="text-slate-600 text-sm">
-                              Create a public link that anyone can use to view this question
-                            </p>
-                          </div>
-                          
-                          {selectedQuestion && (
-                            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 mb-4">
-                              <h4 className="font-medium text-emerald-900 mb-2">Question Preview:</h4>
-                              <p className="text-sm text-emerald-800 mb-2">
-                                {selectedQuestion.question_text.length > 100 
-                                  ? selectedQuestion.question_text.substring(0, 100) + '...' 
-                                  : selectedQuestion.question_text}
-                              </p>
-                              <div className="flex space-x-2 justify-center">
-                                <Badge className="bg-emerald-100 text-emerald-800">{selectedQuestion.subject}</Badge>
-                                <Badge className="bg-emerald-100 text-emerald-800">{selectedQuestion.question_type}</Badge>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="mb-4">
-                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                              <CheckCircle className="h-8 w-8 text-green-600" />
-                            </div>
-                            <h3 className="text-lg font-semibold text-green-900 mb-2">
-                              Link Generated Successfully!
-                            </h3>
-                            <p className="text-green-700 text-sm mb-4">
-                              Share this link with anyone to let them view the question
-                            </p>
-                          </div>
-                          
-                          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                            <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                              Shareable Link (valid for 30 days)
-                            </Label>
-                            <div className="flex items-center space-x-2">
-                              <Input 
-                                value={shareLink} 
-                                readOnly 
-                                className="font-mono text-sm flex-1"
-                                onClick={(e) => e.target.select()}
-                              />
-                              <Button 
-                                onClick={handleCopyLink}
-                                variant="outline"
-                                size="sm"
-                                className={linkCopied ? 'bg-green-50 text-green-700 border-green-300' : ''}
-                              >
-                                {linkCopied ? (
-                                  <>
-                                    <Check className="h-4 w-4 mr-1" />
-                                    Copied!
-                                  </>
-                                ) : (
-                                  'Copy'
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                          
-                          <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
-                            <p className="text-xs text-blue-700">
-                              💡 <strong>Tip:</strong> Recipients can view this question without needing to sign up or log in
-                            </p>
-                          </div>
-                        </div>
-                      )}
+                    <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
+                      <p className="text-xs text-blue-700">
+                        ✨ <strong>No signup required:</strong> Recipients can view this question instantly
+                      </p>
                     </div>
-                  </TabsContent>
-                </Tabs>
+                  </div>
+                )}
               </div>
             </div>
             
@@ -3122,31 +3083,20 @@ const StudentQuestionBank = () => {
                 variant="outline" 
                 onClick={() => {
                   setShowShareDialog(false);
-                  setShareEmails('');
-                  setShareMethod('email');
                   setShareLink('');
                   setLinkCopied(false);
                 }}
               >
-                {shareMethod === 'link' && shareLink ? 'Done' : 'Cancel'}
+                {shareLink ? 'Done' : 'Cancel'}
               </Button>
-              {(!shareLink || shareMethod === 'email') && (
+              {!shareLink && (
                 <Button 
                   onClick={handleShareQuestion}
-                  disabled={(shareMethod === 'email' && !shareEmails.trim()) || !selectedQuestion}
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                  disabled={!selectedQuestion}
+                  className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800"
                 >
-                  {shareMethod === 'email' ? (
-                    <>
-                      <span className="mr-2">📧</span>
-                      Send Emails
-                    </>
-                  ) : (
-                    <>
-                      <span className="mr-2">🔗</span>
-                      Generate Link
-                    </>
-                  )}
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Generate Link
                 </Button>
               )}
             </div>
@@ -3687,43 +3637,46 @@ const StudentQuestionBank = () => {
                                     })}
                                   </div>
                                   
-                                  {quizMode && userAnswer !== undefined && !showResult && (
-                                    <div className="flex justify-center pt-2">
-                                      <Button
-                                        onClick={() => {
-                                          // Check answer and show results
-                                          const correctAnswers = question.options
-                                            .map((opt, idx) => opt.is_correct ? idx : null)
-                                            .filter(idx => idx !== null);
-                                          
-                                          let isCorrectAnswer = false;
-                                          if (question.question_type === 'MSQ') {
-                                            const userAnswerArray = Array.isArray(userAnswer) ? userAnswer : [userAnswer];
-                                            isCorrectAnswer = correctAnswers.length === userAnswerArray.length &&
-                                              correctAnswers.every(idx => userAnswerArray.includes(idx));
-                                          } else {
-                                            isCorrectAnswer = correctAnswers.includes(userAnswer);
-                                          }
-                                          
-                                          setQuizResults(prev => ({
-                                            ...prev,
-                                            [question.id || index]: isCorrectAnswer
-                                          }));
-                                          
-                                          if (isCorrectAnswer) {
-                                            toast.success('Correct answer! 🎉');
-                                          } else {
-                                            toast.error('Incorrect. Try again! 💪');
-                                          }
-                                        }}
-                                        size="sm"
-                                        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
-                                      >
-                                        <CheckCircle className="h-4 w-4 mr-1" />
-                                        Check Answer
-                                      </Button>
-                                    </div>
-                                  )}
+                                  {(() => {
+                                    const currentAnswer = quizAnswers[question.id || index];
+                                    return quizMode && currentAnswer !== undefined && !showResult && (
+                                      <div className="flex justify-center pt-2">
+                                        <Button
+                                          onClick={() => {
+                                            // Check answer and show results
+                                            const correctAnswers = question.options
+                                              .map((opt, idx) => opt.is_correct ? idx : null)
+                                              .filter(idx => idx !== null);
+                                            
+                                            let isCorrectAnswer = false;
+                                            if (question.question_type === 'MSQ') {
+                                              const userAnswerArray = Array.isArray(currentAnswer) ? currentAnswer : [currentAnswer];
+                                              isCorrectAnswer = correctAnswers.length === userAnswerArray.length &&
+                                                correctAnswers.every(idx => userAnswerArray.includes(idx));
+                                            } else {
+                                              isCorrectAnswer = correctAnswers.includes(currentAnswer);
+                                            }
+                                            
+                                            setQuizResults(prev => ({
+                                              ...prev,
+                                              [question.id || index]: isCorrectAnswer
+                                            }));
+                                            
+                                            if (isCorrectAnswer) {
+                                              toast.success('Correct answer! 🎉');
+                                            } else {
+                                              toast.error('Incorrect. Try again! 💪');
+                                            }
+                                          }}
+                                          size="sm"
+                                          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                                        >
+                                          <CheckCircle className="h-4 w-4 mr-1" />
+                                          Check Answer
+                                        </Button>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               )}
                               
@@ -4098,36 +4051,71 @@ const QuestionsList = ({ questions, loading, onShare, onView, onDelete, onGenera
     <div className="space-y-4">
       {questions.map((question) => (
         <Card key={question.id} className="hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex-1">
-                <div className="flex items-center space-x-3 mb-2">
-                  <Badge className={getQuestionBadgeColor(question)}>
+          <CardContent className="p-4 sm:p-6">
+            {/* Mobile-first layout */}
+            <div className="space-y-4">
+              {/* Header with badges */}
+              <div className="flex flex-col space-y-3 sm:space-y-2">
+                <div className="flex flex-wrap gap-2 items-center">
+                  <Badge className={getQuestionBadgeColor(question)} className="text-xs">
                     {getQuestionLabel(question)}
                   </Badge>
-                  <Badge variant="outline">{question.question_type}</Badge>
-                  <Badge variant="outline">{question.subject}</Badge>
-                  <span className="text-sm text-slate-500">{question.marks} marks</span>
+                  <Badge variant="outline" className="text-xs">{question.question_type}</Badge>
+                  <Badge variant="outline" className="text-xs">{question.subject}</Badge>
+                  <span className="text-xs text-slate-500 ml-auto sm:ml-0">{question.marks} marks</span>
                 </div>
-                <p className="text-slate-900 dark:text-slate-100 font-medium mb-2">
-                  {question.question_text.substring(0, 150)}...
+                
+                {/* Question text */}
+                <p className="text-slate-900 dark:text-slate-100 font-medium text-sm sm:text-base leading-relaxed">
+                  {window.innerWidth < 640 
+                    ? question.question_text.substring(0, 120) + (question.question_text.length > 120 ? '...' : '')
+                    : question.question_text.substring(0, 150) + (question.question_text.length > 150 ? '...' : '')
+                  }
                 </p>
-                <div className="text-sm text-slate-600 dark:text-slate-300">
+                
+                {/* Topic and difficulty */}
+                <div className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
                   <span>Topic: {question.topic}</span>
                   <span className="mx-2">•</span>
                   <span>Difficulty: {question.difficulty}</span>
                 </div>
               </div>
-              <div className="flex space-x-1 ml-4">
+              
+              {/* Action buttons - mobile responsive */}
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                {/* Primary actions (always visible) */}
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => onView && onView(question)}
+                  className="flex-1 sm:flex-none min-w-0"
+                >
+                  <Eye className="h-4 w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">View</span>
+                </Button>
+                
+                {showShareButton && question.user_relation === 'own' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onShare(question)}
+                    className="flex-1 sm:flex-none"
+                  >
+                    <Share2 className="h-4 w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Share</span>
+                  </Button>
+                )}
+                
+                {/* AI features - grouped in mobile */}
                 {showAiFeatures && aiStatus?.available && (
-                  <>
+                  <div className="flex gap-1 sm:gap-2">
                     {(!question.explanation || question.explanation.trim() === '') && (
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => onGenerateExplanation && onGenerateExplanation(question.id)}
                         title="Generate AI Explanation"
-                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 px-2 sm:px-3"
                       >
                         <Sparkles className="h-4 w-4" />
                       </Button>
@@ -4138,49 +4126,32 @@ const QuestionsList = ({ questions, loading, onShare, onView, onDelete, onGenera
                         size="sm"
                         onClick={() => onEnhanceQuestion && onEnhanceQuestion(question.id)}
                         title="Enhance Question with AI"
-                        className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                        className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2 sm:px-3"
                       >
                         <Wand2 className="h-4 w-4" />
                       </Button>
                     )}
-                  </>
+                  </div>
                 )}
+                
                 {question.explanation && question.explanation.trim() && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => onViewExplanation && onViewExplanation(question)}
-                    title="View Explanation"
-                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 sm:px-3"
                   >
-                    <Lightbulb className="h-4 w-4" />
+                    <Lightbulb className="h-4 w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Explain</span>
                   </Button>
                 )}
-                {showShareButton && question.user_relation === 'own' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onShare(question)}
-                    title="Share Question"
-                  >
-                    <Share2 className="h-4 w-4" />
-                  </Button>
-                )}
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => onView && onView(question)}
-                  title="View Question Details"
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
+                
                 {showDeleteButton && question.user_relation === 'own' && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => onDelete && onDelete(question)}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    title="Delete Question"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 ml-auto px-2 sm:px-3"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

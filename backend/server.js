@@ -14,65 +14,10 @@ const { body, validationResult } = require('express-validator');
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 
 // Load Gemini service after environment variables
 const geminiService = require('./services/geminiService');
-
-// Email service configuration
-const createEmailTransporter = () => {
-  if (!process.env.EMAIL_USER || process.env.EMAIL_USER === 'your-email@gmail.com') {
-    console.log('⚠️  Email service not configured - emails will be simulated');
-    return null;
-  }
-  
-  return nodemailer.createTransporter({
-    service: process.env.EMAIL_SERVICE || 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
-};
-
-const emailTransporter = createEmailTransporter();
-
-// Email templates
-const createQuestionShareEmail = (senderName, questionTitle, questionLink, viewLink) => {
-  return {
-    subject: `${senderName} shared a GATE exam question with you`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
-        <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <h2 style="color: #059669; margin-bottom: 20px;">📚 Question Shared with You!</h2>
-          
-          <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
-            <strong>${senderName}</strong> has shared a GATE exam question with you from the GATE Exam Simulator.
-          </p>
-          
-          <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; border-left: 4px solid #059669; margin: 20px 0;">
-            <h3 style="color: #065f46; margin: 0 0 10px 0;">Question Preview:</h3>
-            <p style="color: #047857; font-weight: 500; margin: 0;">${questionTitle}</p>
-          </div>
-          
-          <div style="margin: 30px 0;">
-            <a href="${viewLink}" style="display: inline-block; background: #059669; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 500; margin-right: 10px;">🔍 View Question</a>
-            <a href="${questionLink}" style="display: inline-block; background: #0f766e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 500;">📝 Practice on Platform</a>
-          </div>
-          
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-          
-          <p style="color: #6b7280; font-size: 14px; margin: 0;">
-            📱 <strong>GATE Exam Simulator</strong> - Prepare for your GATE exam with AI-powered questions and practice tests.<br>
-            This email was sent because someone shared a question with your email address.
-          </p>
-        </div>
-      </div>
-    `,
-    text: `${senderName} shared a GATE exam question with you!\n\nQuestion: ${questionTitle}\n\nView the question: ${viewLink}\n\nPractice on platform: ${questionLink}\n\nGATE Exam Simulator - Prepare for your GATE exam with AI-powered questions.`
-  };
-};
 
 const app = express();
 const PORT = process.env.PORT || 8001;
@@ -276,7 +221,9 @@ const authenticate = async (req, res, next) => {
     const token = authHeader.substring(7);
     const decoded = jwt.verify(token, SECRET_KEY);
     
-    const user = await User.findOne({ email: decoded.sub });
+    // Normalize email for case-insensitive lookup
+    const normalizedEmail = decoded.sub.toLowerCase().trim();
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
     if (!user) {
       return res.status(401).json({ detail: 'Could not validate credentials' });
     }
@@ -332,17 +279,20 @@ app.post('/api/auth/register', [
 ], handleValidationErrors, async (req, res) => {
   try {
     const { email, password, full_name, role = UserRole.STUDENT } = req.body;
+    
+    // Normalize email to lowercase for case-insensitive comparison
+    const normalizedEmail = email.toLowerCase().trim();
 
-    // Check if user exists
-    const existingUser = await User.findOne({ email });
+    // Check if user exists (case-insensitive)
+    const existingUser = await User.findOne({ email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
     if (existingUser) {
       return res.status(400).json({ detail: 'Email already registered' });
     }
 
-    // Create user
+    // Create user with normalized email
     const hashedPassword = await hashPassword(password);
     const user = new User({
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       full_name,
       role
@@ -369,8 +319,11 @@ app.post('/api/auth/login', [
 ], handleValidationErrors, async (req, res) => {
   try {
     const { email, password } = req.body;
+    
+    // Normalize email to lowercase for case-insensitive comparison
+    const normalizedEmail = email.toLowerCase().trim();
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
     if (!user || !(await verifyPassword(password, user.password))) {
       return res.status(401).json({ detail: 'Incorrect email or password' });
     }
@@ -558,7 +511,6 @@ app.post('/api/questions', authenticate, [
 app.post('/api/questions/:questionId/share', authenticate, async (req, res) => {
   try {
     const { questionId } = req.params;
-    const { recipient_emails, share_method = 'email' } = req.body; // 'email' or 'link'
 
     // Find question and verify permission
     const question = await Question.findOne({ id: questionId });
@@ -570,94 +522,24 @@ app.post('/api/questions/:questionId/share', authenticate, async (req, res) => {
       return res.status(403).json({ detail: 'Permission denied' });
     }
 
-    let shareLink = null;
-    let emailsSent = 0;
+    // Generate or reuse share token
+    if (!question.share_token || question.share_token_expires < new Date()) {
+      question.share_token = crypto.randomBytes(32).toString('hex');
+      question.share_token_expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    }
     
-    // Generate or reuse share token for link sharing
-    if (share_method === 'link' || recipient_emails?.length > 0) {
-      if (!question.share_token || question.share_token_expires < new Date()) {
-        question.share_token = crypto.randomBytes(32).toString('hex');
-        question.share_token_expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-      }
-      
-      shareLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/shared/${question.share_token}`;
-    }
-
-    // Handle email sharing
-    if (share_method === 'email' && recipient_emails?.length > 0) {
-      // Validate emails
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const cleanEmails = recipient_emails
-        .map(e => String(e).trim().toLowerCase())
-        .filter(e => emailRegex.test(e));
-
-      if (cleanEmails.length === 0) {
-        return res.status(400).json({ detail: 'No valid recipient emails provided' });
-      }
-
-      // Update shared emails list
-      const current = new Set(question.shared_with_emails || []);
-      cleanEmails.forEach(e => current.add(e));
-      question.shared_with_emails = Array.from(current);
-
-      // Send emails if email service is configured
-      if (emailTransporter) {
-        const questionTitle = question.question_text.length > 100 
-          ? question.question_text.substring(0, 100) + '...' 
-          : question.question_text;
-          
-        const platformLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard`;
-        
-        for (const email of cleanEmails) {
-          try {
-            const emailContent = createQuestionShareEmail(
-              req.user.full_name,
-              questionTitle,
-              platformLink,
-              shareLink
-            );
-            
-            await emailTransporter.sendMail({
-              from: process.env.EMAIL_FROM || 'GATE Exam Simulator <noreply@example.com>',
-              to: email,
-              ...emailContent
-            });
-            
-            emailsSent++;
-          } catch (emailError) {
-            console.error(`Failed to send email to ${email}:`, emailError);
-          }
-        }
-      } else {
-        console.log('📧 Email simulation - Would send to:', cleanEmails);
-        emailsSent = cleanEmails.length; // Simulate success for development
-      }
-    }
-
+    const shareLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/shared/${question.share_token}`;
     await question.save();
 
-    const response = {
+    res.json({
       success: true,
-      message: share_method === 'link' 
-        ? 'Share link generated successfully'
-        : `Question shared with ${emailsSent} recipient(s)`,
-      share_method,
-    };
-
-    if (shareLink) {
-      response.share_link = shareLink;
-      response.expires_at = question.share_token_expires;
-    }
-    
-    if (share_method === 'email') {
-      response.emails_sent = emailsSent;
-      response.shared_with_emails = question.shared_with_emails;
-    }
-
-    res.json(response);
+      message: 'Share link generated successfully',
+      share_link: shareLink,
+      expires_at: question.share_token_expires
+    });
   } catch (error) {
     console.error('Share question error:', error);
-    res.status(500).json({ detail: 'Failed to share question' });
+    res.status(500).json({ detail: 'Failed to generate share link' });
   }
 });
 
@@ -740,6 +622,8 @@ app.post('/api/admin/upload/csv', authenticate, requireAdmin, upload.single('fil
     const results = [];
     const errors = [];
     let questionsAdded = 0;
+    let duplicatesSkipped = 0;
+    const duplicateDetails = [];
 
     // Parse CSV - Better handling of quoted fields
     const rows = [];
@@ -776,14 +660,68 @@ app.post('/api/admin/upload/csv', authenticate, requireAdmin, upload.single('fil
     const headers = rows[0].map(h => h.trim());
     console.log('CSV Headers:', headers);
     
+    // Create sets to track duplicates within the CSV file itself
+    const csvQuestionTexts = new Set();
+    const csvDuplicates = [];
+    
+    // First pass: identify duplicates within CSV file
+    const validRows = [];
     for (let i = 1; i < rows.length; i++) {
       if (rows[i].length < headers.length) continue;
       
-      try {
-        const row = {};
-        headers.forEach((header, index) => {
-          row[header] = rows[i][index] ? rows[i][index].trim().replace(/^"|"$/g, '') : '';
+      const row = {};
+      headers.forEach((header, index) => {
+        row[header] = rows[i][index] ? rows[i][index].trim().replace(/^"|"$/g, '') : '';
+      });
+      
+      if (!row.question_text) continue;
+      
+      // Create a normalized key for duplicate detection
+      const normalizedKey = `${row.question_text.trim().toLowerCase()}|${(row.subject || 'General').trim().toLowerCase()}|${(row.topic || 'General').trim().toLowerCase()}`;
+      
+      if (csvQuestionTexts.has(normalizedKey)) {
+        csvDuplicates.push({
+          row_number: i + 1,
+          question_text: row.question_text,
+          subject: row.subject || 'General',
+          topic: row.topic || 'General',
+          duplicate_type: 'within_csv'
         });
+        duplicatesSkipped++;
+      } else {
+        csvQuestionTexts.add(normalizedKey);
+        validRows.push({ rowIndex: i, rowData: row });
+      }
+    }
+    
+    // Get existing questions from database for comparison
+    const existingQuestions = await Question.find({}, 'question_text subject topic').lean();
+    const existingQuestionsSet = new Set();
+    
+    existingQuestions.forEach(q => {
+      const normalizedKey = `${q.question_text.trim().toLowerCase()}|${q.subject.trim().toLowerCase()}|${q.topic.trim().toLowerCase()}`;
+      existingQuestionsSet.add(normalizedKey);
+    });
+    
+    // Second pass: process valid rows and check against database
+    for (const { rowIndex, rowData } of validRows) {
+      try {
+        const row = rowData;
+        
+        // Check if this question already exists in the database
+        const normalizedKey = `${row.question_text.trim().toLowerCase()}|${(row.subject || 'General').trim().toLowerCase()}|${(row.topic || 'General').trim().toLowerCase()}`;
+        
+        if (existingQuestionsSet.has(normalizedKey)) {
+          duplicateDetails.push({
+            row_number: rowIndex + 1,
+            question_text: row.question_text,
+            subject: row.subject || 'General',
+            topic: row.topic || 'General',
+            duplicate_type: 'database_existing'
+          });
+          duplicatesSkipped++;
+          continue;
+        }
 
         console.log('Processing row:', row);
         
@@ -845,16 +783,33 @@ app.post('/api/admin/upload/csv', authenticate, requireAdmin, upload.single('fil
 
         const question = new Question(questionData);
         await question.save();
+        
+        // Add to existing questions set to prevent duplicates in subsequent rows
+        existingQuestionsSet.add(normalizedKey);
         questionsAdded++;
 
       } catch (error) {
-        errors.push(`Row ${i + 1}: ${error.message}`);
+        errors.push(`Row ${rowIndex + 1}: ${error.message}`);
       }
     }
 
+    // Combine CSV duplicates with duplicate details
+    const allDuplicates = [...csvDuplicates, ...duplicateDetails];
+
     res.json({
-      message: `Successfully added ${questionsAdded} questions`,
-      errors: errors.length > 0 ? errors : null
+      message: `Successfully processed CSV file`,
+      questions_added: questionsAdded,
+      duplicates_skipped: duplicatesSkipped,
+      total_errors: errors.length,
+      duplicate_details: allDuplicates.length > 0 ? allDuplicates : null,
+      errors: errors.length > 0 ? errors : null,
+      summary: {
+        total_rows_processed: validRows.length + csvDuplicates.length,
+        unique_questions_added: questionsAdded,
+        csv_internal_duplicates: csvDuplicates.length,
+        database_duplicates: duplicateDetails.length,
+        processing_errors: errors.length
+      }
     });
 
   } catch (error) {
@@ -909,6 +864,18 @@ app.post('/api/admin/preview-csv', authenticate, requireAdmin, upload.single('fi
     headers = rows[0].map(h => h.trim());
     const totalRows = rows.length - 1; // Excluding header
     
+    // Get existing questions for duplicate detection in preview
+    const existingQuestions = await Question.find({}, 'question_text subject topic').lean();
+    const existingQuestionsSet = new Set();
+    
+    existingQuestions.forEach(q => {
+      const normalizedKey = `${q.question_text.trim().toLowerCase()}|${q.subject.trim().toLowerCase()}|${q.topic.trim().toLowerCase()}`;
+      existingQuestionsSet.add(normalizedKey);
+    });
+    
+    // Track duplicates within preview rows
+    const previewQuestionTexts = new Set();
+    
     // Process first 10 rows (or less) for preview
     for (let i = 1; i < Math.min(rows.length, 11); i++) {
       try {
@@ -956,6 +923,18 @@ app.post('/api/admin/preview-csv', authenticate, requireAdmin, upload.single('fi
           }
         }
 
+        // Check for duplicates
+        const normalizedKey = `${row.question_text.trim().toLowerCase()}|${(row.subject || 'General').trim().toLowerCase()}|${(row.topic || 'General').trim().toLowerCase()}`;
+        let duplicateWarning = null;
+        
+        if (existingQuestionsSet.has(normalizedKey)) {
+          duplicateWarning = 'This question already exists in the database';
+        } else if (previewQuestionTexts.has(normalizedKey)) {
+          duplicateWarning = 'Duplicate question found within this CSV file';
+        } else {
+          previewQuestionTexts.add(normalizedKey);
+        }
+
         previewQuestions.push({
           row_number: i + 1,
           question_text: row.question_text,
@@ -967,6 +946,7 @@ app.post('/api/admin/preview-csv', authenticate, requireAdmin, upload.single('fi
           options,
           correct_answer: row.correct_answer,
           explanation: row.explanation || '',
+          duplicate_warning: duplicateWarning,
           raw_row: row
         });
         rowCount++;
@@ -981,12 +961,23 @@ app.post('/api/admin/preview-csv', authenticate, requireAdmin, upload.single('fi
       }
     }
 
+    // Calculate duplicate statistics for the preview
+    const duplicateWarnings = previewQuestions.filter(q => q.duplicate_warning).length;
+    const databaseDuplicates = previewQuestions.filter(q => q.duplicate_warning === 'This question already exists in the database').length;
+    const csvInternalDuplicates = previewQuestions.filter(q => q.duplicate_warning === 'Duplicate question found within this CSV file').length;
+
     res.json({
       headers,
       preview_questions: previewQuestions,
       total_rows: totalRows,
       showing_rows: Math.min(10, totalRows),
-      filename: req.file.originalname
+      filename: req.file.originalname,
+      duplicate_analysis: {
+        total_duplicates_in_preview: duplicateWarnings,
+        database_duplicates: databaseDuplicates,
+        csv_internal_duplicates: csvInternalDuplicates,
+        note: 'This is a preview of first 10 rows. Full analysis will be done during import.'
+      }
     });
 
   } catch (error) {

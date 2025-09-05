@@ -1,0 +1,8 @@
+question_text,question_type,subject,topic,difficulty,marks,negative_marks,option_1,option_1_correct,option_2,option_2_correct,option_3,option_3_correct,option_4,option_4_correct,explanation
+"What is the time complexity of binary search?",MCQ,Algorithms,Searching,medium,1,0.33,"O(n)",false,"O(log n)",true,"O(n²)",false,"O(1)",false,"Binary search divides the search space in half each time"
+"Which data structure uses LIFO principle?",MCQ,Data Structures,Stack,easy,1,0.33,"Queue",false,"Stack",true,"Tree",false,"Graph",false,"LIFO means Last In First Out"
+"What is the time complexity of binary search?",MCQ,Algorithms,Searching,medium,1,0.33,"O(n)",false,"O(log n)",true,"O(n²)",false,"O(1)",false,"Binary search divides the search space in half each time"
+"What is 2+2?",NAT,Mathematics,Arithmetic,easy,1,0,4,true,,,,,,"Simple addition"
+"Which sorting algorithm has best case O(n)?",MCQ,Algorithms,Sorting,medium,2,0.5,"Quick Sort",false,"Merge Sort",false,"Bubble Sort",true,"Heap Sort",false,"Bubble sort can be O(n) when array is already sorted"
+"What is 2+2?",NAT,Mathematics,Arithmetic,easy,1,0,4,true,,,,,,"Simple addition"
+"Which of the following are sorting algorithms?",MSQ,Algorithms,Sorting,medium,2,0,"Bubble Sort",true,"Linear Search",false,"Quick Sort",true,"Binary Search",false,"Bubble Sort and Quick Sort are sorting algorithms"
