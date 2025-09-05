@@ -262,25 +262,25 @@ select:focus {
 }
 
 .dark {
-  --background: 222 47% 11%;
-  --foreground: 213 31% 91%;
-  --card: 217 33% 17%;
-  --card-foreground: 213 31% 91%;
-  --popover: 217 33% 17%;
-  --popover-foreground: 213 31% 91%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222 47% 11%;
-  --secondary: 217 33% 17%;
-  --secondary-foreground: 213 31% 91%;
-  --muted: 223 47% 11%;
-  --muted-foreground: 215 20% 65%;
-  --accent: 217 33% 17%;
-  --accent-foreground: 213 31% 91%;
-  --destructive: 0 63% 31%;
-  --destructive-foreground: 213 31% 91%;
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
-  --ring: 212 95% 76%;
+  --background: 0 0% 0%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 2%;
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 2%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 0 0% 100%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 0 0% 8%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 8%;
+  --muted-foreground: 0 0% 70%;
+  --accent: 0 0% 8%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 12%;
+  --input: 0 0% 8%;
+  --ring: 0 0% 90%;
 }
 
 /* Simple Dark Mode Support */
@@ -289,21 +289,26 @@ select:focus {
 }
 
 .dark body {
-  background-color: #1a1a1a;
-  color: #e5e7eb;
+  background-color: #000000;
+  color: #fafafa;
 }
 
 /* Dark mode scrollbar */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+}
+
 .dark ::-webkit-scrollbar-track {
-  background: #374151;
+  background: #000000;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #6b7280;
+  background: #333333;
+  border-radius: 4px;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: #555555;
 }
 
 /* Print styles */

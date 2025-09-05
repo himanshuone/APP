@@ -1,17 +1,47 @@
-# GATE Exam Simulator
+# 🎯 GATE Exam Simulator
 
-A comprehensive GATE (Graduate Aptitude Test in Engineering) exam simulation platform built with React frontend and Node.js/Express backend with MongoDB.
+<div align="center">
+  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
+  <img src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
+</div>
 
-## 🚀 Features
+<br />
 
-- **User Authentication**: Secure registration and login system
-- **Exam Management**: Create and configure mock exams
-- **Question Types**: Support for MCQ, MSQ, and NAT questions
-- **Real-time Exam**: Timed exam sessions with automatic submission
-- **Results & Analytics**: Detailed performance analysis
-- **File Upload**: Import questions via CSV or PDF files
-- **Admin Panel**: Question and exam management
-- **Responsive Design**: Modern UI with Tailwind CSS
+A **comprehensive GATE (Graduate Aptitude Test in Engineering)** exam simulation platform featuring a modern React frontend with **pure black dark mode** and a robust Node.js/Express backend with MongoDB integration.
+
+## ✨ Features
+
+### 🎨 **UI/UX Excellence**
+- **🌙 Pure Black Dark Mode**: Aesthetic dark theme with complete black background
+- **📱 Responsive Design**: Seamless experience across all devices
+- **⚡ Modern UI Components**: Built with Radix UI and Tailwind CSS
+- **🎭 Smooth Animations**: Enhanced user experience with fluid transitions
+
+### 🔐 **Authentication & Security**
+- **🛡️ JWT Authentication**: Secure token-based authentication
+- **👥 Role-based Access**: Student and Admin role management
+- **🔒 Password Security**: bcrypt encryption with secure hashing
+
+### 📚 **Exam Management**
+- **📝 Question Bank**: Personal and shared question collections
+- **🎯 Multiple Question Types**: MCQ, MSQ, and NAT support
+- **⏱️ Real-time Exam Interface**: Timed sessions with auto-submission
+- **📊 Comprehensive Analytics**: Detailed performance tracking
+- **🔄 Exam History**: Track progress and retake exams
+
+### 🛠️ **Admin Features**
+- **📤 File Upload**: Import questions via CSV or PDF
+- **⚙️ Exam Configuration**: Create and manage exam sessions
+- **👨‍💼 User Management**: Monitor student progress and analytics
+- **📈 Advanced Analytics**: Performance insights and reporting
+
+### 🚀 **Technical Features**
+- **🔄 Auto-save**: Draft preservation for questions and exams
+- **🌐 RESTful API**: Clean and well-documented API endpoints
+- **📱 Mobile Optimized**: Touch-friendly interface for mobile devices
+- **🎨 Theme System**: Integrated light/dark mode with next-themes
 
 ## 🏗️ Architecture
 
