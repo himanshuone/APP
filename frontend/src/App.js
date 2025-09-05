@@ -19,6 +19,7 @@ import { Checkbox } from './components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from './components/ui/radio-group';
 import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
+import aiService from './services/aiService';
 
 // Icons
 import { 
@@ -50,11 +51,39 @@ import {
   Check,
   Minus,
   FileQuestion,
-  Menu
+  Menu,
+  Brain,
+  Sparkles,
+  MessageSquare,
+  Lightbulb,
+  Wand2,
+  Bot,
+  Zap
 } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// Auto-detect if running on mobile network vs localhost
+const getBackendURL = () => {
+  const hostname = window.location.hostname;
+  console.log('🌐 Detected hostname:', hostname);
+  
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    const url = process.env.REACT_APP_LOCAL_BACKEND_URL || 'http://localhost:8001';
+    console.log('🏠 Using localhost backend:', url);
+    return url;
+  } else {
+    // For network access, always use the network IP
+    const url = 'http://192.168.1.5:8001';
+    console.log('📱 Using network backend:', url);
+    return url;
+  }
+};
+
+const BACKEND_URL = getBackendURL();
 const API = `${BACKEND_URL}/api`;
+
+// Log for debugging
+console.log('🔗 Final Backend URL:', BACKEND_URL);
+console.log('🔗 API Base:', API);
 
 // Auth Context
 const AuthContext = createContext();
@@ -844,8 +873,8 @@ const Dashboard = () => {
   );
 };
 
-// Exam Creation Form Component
-const ExamCreationForm = ({ onExamCreated }) => {
+// Admin Exam Creation Form Component
+const AdminExamCreationForm = ({ onExamCreated }) => {
   const EXAM_STORAGE_KEY = 'examCreateForm';
   
   // Load saved exam form data from localStorage
@@ -1417,11 +1446,53 @@ const StudentQuestionBank = () => {
   const [examCreationLoading, setExamCreationLoading] = useState(false);
   const [exams, setExams] = useState([]);
   const [examsLoading, setExamsLoading] = useState(false);
+  const [aiStatus, setAiStatus] = useState(null);
+  const [showAiTutor, setShowAiTutor] = useState(false);
+  const [tutorQuestion, setTutorQuestion] = useState('');
+  const [tutorAnswer, setTutorAnswer] = useState('');
+  const [tutorLoading, setTutorLoading] = useState(false);
+  const [showAiGenerator, setShowAiGenerator] = useState(false);
+  const [generatorData, setGeneratorData] = useState({
+    subject: '',
+    topic: '',
+    difficulty: 'medium',
+    count: 1,
+    questionType: 'MCQ'
+  });
+  const [generatorLoading, setGeneratorLoading] = useState(false);
+  const [generatedQuestions, setGeneratedQuestions] = useState([]);
+  const [showGeneratedQuestions, setShowGeneratedQuestions] = useState(false);
+  const [showExplanationDialog, setShowExplanationDialog] = useState(false);
+  const [selectedExplanation, setSelectedExplanation] = useState(null);
+  const [explanationLoading, setExplanationLoading] = useState(false);
+  const [showBulkShareDialog, setShowBulkShareDialog] = useState(false);
+  const [bulkShareEmails, setBulkShareEmails] = useState('');
+  const [selectedQuestionsForBulkShare, setSelectedQuestionsForBulkShare] = useState([]);
+  const [showSearchSettings, setShowSearchSettings] = useState(false);
+  const [quizMode, setQuizMode] = useState(true); // Toggle between quiz and practice mode
+  const [quizAnswers, setQuizAnswers] = useState({}); // Store user answers for quiz mode
+  const [quizResults, setQuizResults] = useState({}); // Store quiz results (correct/incorrect)
+  const [showCreateExamFromGenerated, setShowCreateExamFromGenerated] = useState(false);
+  const [shareMethod, setShareMethod] = useState('email'); // 'email' or 'link'
+  const [shareLink, setShareLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     fetchQuestions();
     fetchExams();
+    checkAiStatus();
   }, []);
+
+  const checkAiStatus = async () => {
+    try {
+      const result = await aiService.getStatus();
+      if (result.success) {
+        setAiStatus(result.data);
+      }
+    } catch (error) {
+      console.error('Failed to check AI status:', error);
+    }
+  };
 
   const fetchExams = async () => {
     setExamsLoading(true);
@@ -1454,29 +1525,77 @@ const StudentQuestionBank = () => {
       setShowCreateForm(false);
       fetchQuestions();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create question');
+      if (error.response?.status === 400 && error.response?.data?.existing_question) {
+        // Handle duplicate detection from backend
+        const existing = error.response.data.existing_question;
+        toast.error(
+          <div className="space-y-2">
+            <div className="font-semibold">Duplicate Question Detected</div>
+            <div className="text-sm">
+              A similar question already exists:
+            </div>
+            <div className="text-xs bg-slate-100 p-2 rounded">
+              <strong>Subject:</strong> {existing.subject}<br/>
+              <strong>Topic:</strong> {existing.topic}<br/>
+              <strong>Question:</strong> {existing.question_text.substring(0, 100)}...
+            </div>
+            <div className="text-xs text-slate-600">
+              Created by: {existing.creator_name || 'Unknown'}
+            </div>
+          </div>,
+          { duration: 8000 }
+        );
+      } else {
+        toast.error(error.response?.data?.detail || 'Failed to create question');
+      }
     }
   };
 
   const handleShareQuestion = async () => {
-    if (!selectedQuestion || !shareEmails.trim()) {
-      toast.error('Please enter recipient emails');
+    if (!selectedQuestion) {
+      toast.error('No question selected');
       return;
     }
 
-    const emails = shareEmails.split(',').map(email => email.trim()).filter(email => email);
-    
     try {
-      await axios.post(`${API}/questions/${selectedQuestion.id}/share`, {
-        question_id: selectedQuestion.id,
-        recipient_emails: emails
-      });
-      toast.success('Question shared successfully!');
-      setShowShareDialog(false);
-      setShareEmails('');
-      setSelectedQuestion(null);
+      let requestData = {
+        share_method: shareMethod
+      };
+
+      if (shareMethod === 'email') {
+        if (!shareEmails.trim()) {
+          toast.error('Please enter recipient emails');
+          return;
+        }
+        const emails = shareEmails.split(',').map(email => email.trim()).filter(email => email);
+        requestData.recipient_emails = emails;
+      }
+
+      const response = await axios.post(`${API}/questions/${selectedQuestion.id}/share`, requestData);
+      
+      if (shareMethod === 'link') {
+        setShareLink(response.data.share_link);
+        toast.success('Share link generated successfully!');
+      } else {
+        toast.success(`Question shared with ${response.data.emails_sent} recipient(s)!`);
+        setShowShareDialog(false);
+        setShareEmails('');
+        setSelectedQuestion(null);
+        setShareMethod('email');
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to share question');
+    }
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setLinkCopied(true);
+      toast.success('Link copied to clipboard!');
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (error) {
+      toast.error('Failed to copy link');
     }
   };
 
@@ -1634,7 +1753,21 @@ const StudentQuestionBank = () => {
       });
       setExamErrors({});
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create exam');
+      const errorDetail = error.response?.data?.detail;
+      if (errorDetail && errorDetail.includes('unique questions')) {
+        toast.error(
+          <div className="space-y-2">
+            <div className="font-semibold">Not Enough Unique Questions</div>
+            <div className="text-sm">{errorDetail}</div>
+            <div className="text-xs text-slate-600">
+              💡 Tip: Add more questions or reduce the exam size to avoid duplicates
+            </div>
+          </div>,
+          { duration: 8000 }
+        );
+      } else {
+        toast.error(errorDetail || 'Failed to create exam');
+      }
     } finally {
       setExamCreationLoading(false);
     }
@@ -1653,6 +1786,228 @@ const StudentQuestionBank = () => {
     } finally {
       setDeleteLoading(false);
     }
+  };
+
+  const handleGenerateExplanation = async (questionId) => {
+    setExplanationLoading(true);
+    try {
+      toast.loading('Generating AI explanation...');
+      const result = await aiService.generateExplanation(questionId);
+      
+      if (result.success) {
+        toast.success('Explanation generated successfully!');
+        
+        // Find the question and set the explanation for display
+        const question = questions.find(q => q.id === questionId);
+        if (question && result.data.explanation) {
+          setSelectedExplanation({
+            question: question,
+            explanation: result.data.explanation,
+            generated: true
+          });
+          setShowExplanationDialog(true);
+        }
+        
+        fetchQuestions(); // Refresh questions to show new explanation
+      } else {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      toast.error('Failed to generate explanation');
+    } finally {
+      setExplanationLoading(false);
+    }
+  };
+
+  const handleAskTutor = async () => {
+    if (!tutorQuestion.trim()) {
+      toast.error('Please enter your question');
+      return;
+    }
+
+    setTutorLoading(true);
+    try {
+      const result = await aiService.askTutor(tutorQuestion);
+      
+      if (result.success) {
+        setTutorAnswer(result.data.answer);
+      } else {
+        toast.error(result.error);
+        setTutorAnswer('');
+      }
+    } catch (error) {
+      toast.error('Failed to get answer from AI Tutor');
+      setTutorAnswer('');
+    } finally {
+      setTutorLoading(false);
+    }
+  };
+
+  const handleGenerateQuestions = async () => {
+    if (!generatorData.subject || !generatorData.topic) {
+      toast.error('Please enter subject and topic');
+      return;
+    }
+
+    setGeneratorLoading(true);
+    try {
+      const result = await aiService.generateQuestions(
+        generatorData.subject,
+        generatorData.topic,
+        generatorData.difficulty,
+        generatorData.count,
+        generatorData.questionType
+      );
+      
+      if (result.success) {
+        toast.success(`Generated ${result.data.count} question(s) successfully!`);
+        
+        // Store generated questions for preview
+        setGeneratedQuestions(result.data.questions || []);
+        setShowGeneratedQuestions(true);
+        
+        fetchQuestions(); // Refresh questions list
+      } else {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      toast.error('Failed to generate questions');
+    } finally {
+      setGeneratorLoading(false);
+    }
+  };
+
+  const handleEnhanceQuestion = async (questionId) => {
+    try {
+      toast.loading('Enhancing question with AI...');
+      const result = await aiService.enhanceQuestion(questionId);
+      
+      if (result.success) {
+        toast.success('Question enhancement suggestions generated!');
+        // You could show the enhancement suggestions in a dialog
+        console.log('Enhancement suggestions:', result.data.enhancement);
+      } else {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      toast.error('Failed to enhance question');
+    }
+  };
+
+  const handleViewExplanation = (question) => {
+    if (question.explanation && question.explanation.trim()) {
+      setSelectedExplanation({
+        question: question,
+        explanation: question.explanation,
+        generated: false
+      });
+      setShowExplanationDialog(true);
+    } else {
+      toast.error('No explanation available for this question');
+    }
+  };
+
+  const handleBulkShare = () => {
+    const myQuestions = getQuestionsByType('my-questions');
+    if (myQuestions.length === 0) {
+      toast.error('You have no questions to share');
+      return;
+    }
+    
+    setSelectedQuestionsForBulkShare(myQuestions);
+    setShowBulkShareDialog(true);
+  };
+
+  const handleBulkShareSubmit = async () => {
+    if (!bulkShareEmails.trim()) {
+      toast.error('Please enter recipient emails');
+      return;
+    }
+
+    if (selectedQuestionsForBulkShare.length === 0) {
+      toast.error('No questions selected for sharing');
+      return;
+    }
+
+    const emails = bulkShareEmails.split(',').map(email => email.trim()).filter(email => email);
+    
+    if (emails.length === 0) {
+      toast.error('Please enter valid email addresses');
+      return;
+    }
+
+    try {
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (const question of selectedQuestionsForBulkShare) {
+        try {
+          await axios.post(`${API}/questions/${question.id}/share`, {
+            question_id: question.id,
+            recipient_emails: emails
+          });
+          successCount++;
+        } catch (error) {
+          errorCount++;
+          console.error(`Failed to share question ${question.id}:`, error);
+        }
+      }
+      
+      if (successCount > 0) {
+        toast.success(`Successfully shared ${successCount} question(s) with ${emails.length} recipient(s)!`);
+      }
+      if (errorCount > 0) {
+        toast.error(`Failed to share ${errorCount} question(s)`);
+      }
+      
+      setShowBulkShareDialog(false);
+      setBulkShareEmails('');
+      setSelectedQuestionsForBulkShare([]);
+    } catch (error) {
+      toast.error('Failed to share questions');
+    }
+  };
+
+  const checkForSimilarQuestions = (questionText, subject, topic) => {
+    if (!questionText.trim() || !subject.trim() || !topic.trim()) return [];
+    
+    const normalizedText = questionText.trim().toLowerCase();
+    const normalizedSubject = subject.trim().toLowerCase();
+    const normalizedTopic = topic.trim().toLowerCase();
+    
+    return questions.filter(q => {
+      const qText = q.question_text.trim().toLowerCase();
+      const qSubject = q.subject.trim().toLowerCase();
+      const qTopic = q.topic.trim().toLowerCase();
+      
+      // Exact match (potential duplicate)
+      if (qText === normalizedText && qSubject === normalizedSubject && qTopic === normalizedTopic) {
+        return true;
+      }
+      
+      // Similar text in same subject/topic
+      if (qSubject === normalizedSubject && qTopic === normalizedTopic) {
+        // Check for high similarity (more than 70% similar)
+        const similarity = calculateTextSimilarity(qText, normalizedText);
+        if (similarity > 0.7) {
+          return true;
+        }
+      }
+      
+      return false;
+    });
+  };
+
+  const calculateTextSimilarity = (text1, text2) => {
+    if (text1 === text2) return 1;
+    
+    const words1 = text1.split(/\s+/);
+    const words2 = text2.split(/\s+/);
+    const allWords = new Set([...words1, ...words2]);
+    
+    const commonWords = words1.filter(word => words2.includes(word));
+    
+    return commonWords.length / allWords.size;
   };
 
   const getQuestionsByType = (type) => {
@@ -1687,7 +2042,9 @@ const StudentQuestionBank = () => {
       
       // Apply subject filter
       if (selectedSubject && selectedSubject !== 'all') {
-        filteredQuestions = filteredQuestions.filter(q => q.subject === selectedSubject);
+        filteredQuestions = filteredQuestions.filter(q => 
+          q.subject && q.subject.trim() === selectedSubject.trim()
+        );
       }
       
       // Apply type filter
@@ -1796,13 +2153,37 @@ const StudentQuestionBank = () => {
         <div className="mb-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">My Question Collection</h2>
-            <Button 
-              onClick={() => setShowCreateForm(true)}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create Question
-            </Button>
+            <div className="flex space-x-2">
+              {aiStatus?.available && (
+                <>
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAiTutor(true)}
+                    className="bg-gradient-to-r from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 border-purple-200"
+                  >
+                    <Bot className="h-4 w-4 mr-2" />
+                    AI Tutor
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAiGenerator(true)}
+                    className="bg-gradient-to-r from-emerald-50 to-emerald-100 hover:from-emerald-100 hover:to-emerald-200 border-emerald-200"
+                  >
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    AI Generate
+                  </Button>
+                </>
+              )}
+              <Button 
+                onClick={() => setShowCreateForm(true)}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Question
+              </Button>
+            </div>
           </div>
           
           <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -1893,7 +2274,12 @@ const StudentQuestionBank = () => {
                           <Eye className="h-4 w-4 mr-2" />
                           Preview All
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={handleBulkShare}
+                          disabled={getQuestionsByType('my-questions').length === 0}
+                        >
                           <Share2 className="h-4 w-4 mr-2" />
                           Bulk Share
                         </Button>
@@ -1926,8 +2312,13 @@ const StudentQuestionBank = () => {
                         setSelectedQuestionToDelete(question);
                         setShowDeleteDialog(true);
                       }}
+                      onGenerateExplanation={handleGenerateExplanation}
+                      onEnhanceQuestion={handleEnhanceQuestion}
+                      onViewExplanation={handleViewExplanation}
                       showShareButton={true}
                       showDeleteButton={true}
+                      showAiFeatures={true}
+                      aiStatus={aiStatus}
                       getQuestionBadgeColor={getQuestionBadgeColor}
                       getQuestionLabel={getQuestionLabel}
                     />
@@ -2019,6 +2410,7 @@ const StudentQuestionBank = () => {
                         questions={getQuestionsByType('shared-with-me')} 
                         loading={loading}
                         onShare={null}
+                        onViewExplanation={handleViewExplanation}
                         showShareButton={false}
                         getQuestionBadgeColor={getQuestionBadgeColor}
                         getQuestionLabel={getQuestionLabel}
@@ -2055,7 +2447,7 @@ const StudentQuestionBank = () => {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">All Subjects</SelectItem>
-                            {[...new Set(questions.map(q => q.subject))].map(subject => (
+                            {[...new Set(questions.map(q => q.subject?.trim() || 'Unknown'))].filter(subject => subject && subject !== 'Unknown').sort().map(subject => (
                               <SelectItem key={subject} value={subject}>{subject}</SelectItem>
                             ))}
                           </SelectContent>
@@ -2077,9 +2469,6 @@ const StudentQuestionBank = () => {
                             Clear
                           </Button>
                         )}
-                        <Button variant="outline" size="sm">
-                          <Settings className="h-4 w-4" />
-                        </Button>
                       </div>
                     </div>
                   </CardContent>
@@ -2150,10 +2539,6 @@ const StudentQuestionBank = () => {
                         </CardDescription>
                       </div>
                       <div className="flex space-x-2">
-                        <Button variant="outline" size="sm">
-                          <BarChart className="h-4 w-4 mr-2" />
-                          Analytics
-                        </Button>
                         <Button 
                           variant="default" 
                           size="sm"
@@ -2163,10 +2548,6 @@ const StudentQuestionBank = () => {
                         >
                           <Plus className="h-4 w-4 mr-2" />
                           Create Exam
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Practice Set
                         </Button>
                       </div>
                     </div>
@@ -2181,6 +2562,7 @@ const StudentQuestionBank = () => {
                           setShowShareDialog(true);
                         }
                       }}
+                      onViewExplanation={handleViewExplanation}
                       showShareButton={false}
                       getQuestionBadgeColor={getQuestionBadgeColor}
                       getQuestionLabel={getQuestionLabel}
@@ -2578,34 +2960,195 @@ const StudentQuestionBank = () => {
         )}
 
         {/* Share Dialog */}
-        <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
-          <DialogContent>
+        <Dialog open={showShareDialog} onOpenChange={(open) => {
+          if (!open) {
+            setShowShareDialog(false);
+            setShareEmails('');
+            setShareMethod('email');
+            setShareLink('');
+            setLinkCopied(false);
+          }
+        }}>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Share Question</DialogTitle>
+              <DialogTitle className="flex items-center">
+                <Share2 className="h-5 w-5 mr-2 text-blue-600" />
+                Share Question
+              </DialogTitle>
               <DialogDescription>
-                Enter the email addresses of people you want to share this question with.
+                Share this question via email or generate a shareable link
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="share-emails">Recipient Emails</Label>
-                <Textarea
-                  id="share-emails"
-                  value={shareEmails}
-                  onChange={(e) => setShareEmails(e.target.value)}
-                  placeholder="Enter email addresses separated by commas..."
-                  className="mt-2"
-                />
+            
+            <div className="space-y-6">
+              {/* Sharing Method Selection */}
+              <div className="space-y-3">
+                <Label className="text-base font-medium">Sharing Method</Label>
+                <Tabs value={shareMethod} onValueChange={setShareMethod} className="w-full">
+                  <TabsList className="grid grid-cols-2 w-full">
+                    <TabsTrigger value="email" className="flex items-center space-x-2">
+                      <span className="text-base">📧</span>
+                      <span>Send via Email</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="link" className="flex items-center space-x-2">
+                      <span className="text-base">🔗</span>
+                      <span>Generate Link</span>
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="email" className="mt-4 space-y-4">
+                    <div>
+                      <Label htmlFor="share-emails" className="text-sm font-medium">
+                        Recipient Email Addresses
+                      </Label>
+                      <Textarea
+                        id="share-emails"
+                        value={shareEmails}
+                        onChange={(e) => setShareEmails(e.target.value)}
+                        placeholder="Enter email addresses separated by commas...\ne.g., john@example.com, jane@example.com"
+                        className="mt-2 min-h-[100px]"
+                        rows={4}
+                      />
+                      <p className="text-sm text-slate-500 mt-1">
+                        Recipients will receive an email with the question and a link to practice
+                      </p>
+                    </div>
+                    
+                    {selectedQuestion && (
+                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <h4 className="font-medium text-blue-900 mb-2">Question to Share:</h4>
+                        <p className="text-sm text-blue-800 mb-2">
+                          {selectedQuestion.question_text.length > 150 
+                            ? selectedQuestion.question_text.substring(0, 150) + '...' 
+                            : selectedQuestion.question_text}
+                        </p>
+                        <div className="flex space-x-2">
+                          <Badge className="bg-blue-100 text-blue-800">{selectedQuestion.subject}</Badge>
+                          <Badge className="bg-blue-100 text-blue-800">{selectedQuestion.question_type}</Badge>
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+                  
+                  <TabsContent value="link" className="mt-4 space-y-4">
+                    <div className="text-center py-6">
+                      {!shareLink ? (
+                        <div>
+                          <div className="mb-4">
+                            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <span className="text-2xl">🔗</span>
+                            </div>
+                            <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                              Generate Shareable Link
+                            </h3>
+                            <p className="text-slate-600 text-sm">
+                              Create a public link that anyone can use to view this question
+                            </p>
+                          </div>
+                          
+                          {selectedQuestion && (
+                            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 mb-4">
+                              <h4 className="font-medium text-emerald-900 mb-2">Question Preview:</h4>
+                              <p className="text-sm text-emerald-800 mb-2">
+                                {selectedQuestion.question_text.length > 100 
+                                  ? selectedQuestion.question_text.substring(0, 100) + '...' 
+                                  : selectedQuestion.question_text}
+                              </p>
+                              <div className="flex space-x-2 justify-center">
+                                <Badge className="bg-emerald-100 text-emerald-800">{selectedQuestion.subject}</Badge>
+                                <Badge className="bg-emerald-100 text-emerald-800">{selectedQuestion.question_type}</Badge>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="mb-4">
+                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <CheckCircle className="h-8 w-8 text-green-600" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-green-900 mb-2">
+                              Link Generated Successfully!
+                            </h3>
+                            <p className="text-green-700 text-sm mb-4">
+                              Share this link with anyone to let them view the question
+                            </p>
+                          </div>
+                          
+                          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                              Shareable Link (valid for 30 days)
+                            </Label>
+                            <div className="flex items-center space-x-2">
+                              <Input 
+                                value={shareLink} 
+                                readOnly 
+                                className="font-mono text-sm flex-1"
+                                onClick={(e) => e.target.select()}
+                              />
+                              <Button 
+                                onClick={handleCopyLink}
+                                variant="outline"
+                                size="sm"
+                                className={linkCopied ? 'bg-green-50 text-green-700 border-green-300' : ''}
+                              >
+                                {linkCopied ? (
+                                  <>
+                                    <Check className="h-4 w-4 mr-1" />
+                                    Copied!
+                                  </>
+                                ) : (
+                                  'Copy'
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
+                            <p className="text-xs text-blue-700">
+                              💡 <strong>Tip:</strong> Recipients can view this question without needing to sign up or log in
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </div>
             </div>
-            <div className="flex justify-end space-x-3">
-              <Button variant="outline" onClick={() => setShowShareDialog(false)}>
-                Cancel
+            
+            <div className="flex justify-end space-x-3 pt-4 border-t">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowShareDialog(false);
+                  setShareEmails('');
+                  setShareMethod('email');
+                  setShareLink('');
+                  setLinkCopied(false);
+                }}
+              >
+                {shareMethod === 'link' && shareLink ? 'Done' : 'Cancel'}
               </Button>
-              <Button onClick={handleShareQuestion}>
-                <Share2 className="h-4 w-4 mr-2" />
-                Share
-              </Button>
+              {(!shareLink || shareMethod === 'email') && (
+                <Button 
+                  onClick={handleShareQuestion}
+                  disabled={(shareMethod === 'email' && !shareEmails.trim()) || !selectedQuestion}
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                >
+                  {shareMethod === 'email' ? (
+                    <>
+                      <span className="mr-2">📧</span>
+                      Send Emails
+                    </>
+                  ) : (
+                    <>
+                      <span className="mr-2">🔗</span>
+                      Generate Link
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </DialogContent>
         </Dialog>
@@ -2782,13 +3325,754 @@ const StudentQuestionBank = () => {
             />
           </DialogContent>
         </Dialog>
+
+        {/* AI Tutor Dialog */}
+        <Dialog open={showAiTutor} onOpenChange={setShowAiTutor}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Bot className="h-5 w-5 mr-2 text-purple-600" />
+                AI Tutor - Ask Me Anything!
+              </DialogTitle>
+              <DialogDescription>
+                Get instant help with GATE exam concepts, problems, and study guidance
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="tutor-question">Your Question</Label>
+                <Textarea
+                  id="tutor-question"
+                  value={tutorQuestion}
+                  onChange={(e) => setTutorQuestion(e.target.value)}
+                  placeholder="Ask anything about GATE exam topics, concepts, or problems..."
+                  rows={3}
+                  className="mt-2"
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-3">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowAiTutor(false);
+                    setTutorQuestion('');
+                    setTutorAnswer('');
+                  }}
+                >
+                  Close
+                </Button>
+                <Button 
+                  onClick={handleAskTutor}
+                  disabled={tutorLoading || !tutorQuestion.trim()}
+                  className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                >
+                  {tutorLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Asking...
+                    </>
+                  ) : (
+                    <>
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Ask AI Tutor
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              {tutorAnswer && (
+                <div className="mt-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200">
+                  <div className="flex items-center mb-3">
+                    <Bot className="h-5 w-5 text-purple-600 mr-2" />
+                    <h4 className="font-semibold text-purple-800 dark:text-purple-200">AI Tutor's Answer:</h4>
+                  </div>
+                  <div className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300">
+                    <pre className="whitespace-pre-wrap font-sans">{tutorAnswer}</pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* AI Question Generator Dialog */}
+        <Dialog open={showAiGenerator} onOpenChange={setShowAiGenerator}>
+          <DialogContent className={`${showGeneratedQuestions ? 'max-w-6xl' : 'max-w-2xl'} max-h-[90vh] overflow-y-auto`}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Sparkles className="h-5 w-5 mr-2 text-emerald-600" />
+                AI Question Generator
+                {generatedQuestions.length > 0 && (
+                  <Badge className="ml-2 bg-emerald-100 text-emerald-800">
+                    {generatedQuestions.length} Generated
+                  </Badge>
+                )}
+              </DialogTitle>
+              <DialogDescription>
+                Generate high-quality GATE exam questions using AI
+              </DialogDescription>
+            </DialogHeader>
+            <div className={`space-y-4 ${showGeneratedQuestions ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : ''}`}>
+              {/* Generation Form */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="gen-subject">Subject *</Label>
+                  <Input
+                    id="gen-subject"
+                    value={generatorData.subject}
+                    onChange={(e) => setGeneratorData(prev => ({ ...prev, subject: e.target.value }))}
+                    placeholder="e.g., Computer Science"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="gen-topic">Topic *</Label>
+                  <Input
+                    id="gen-topic"
+                    value={generatorData.topic}
+                    onChange={(e) => setGeneratorData(prev => ({ ...prev, topic: e.target.value }))}
+                    placeholder="e.g., Data Structures"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label>Difficulty</Label>
+                  <Select 
+                    value={generatorData.difficulty} 
+                    onValueChange={(value) => setGeneratorData(prev => ({ ...prev, difficulty: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="easy">Easy</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="hard">Hard</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Question Type</Label>
+                  <Select 
+                    value={generatorData.questionType} 
+                    onValueChange={(value) => setGeneratorData(prev => ({ ...prev, questionType: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MCQ">MCQ</SelectItem>
+                      <SelectItem value="MSQ">MSQ</SelectItem>
+                      <SelectItem value="NAT">NAT</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Count</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={generatorData.count}
+                    onChange={(e) => setGeneratorData(prev => ({ ...prev, count: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowAiGenerator(false);
+                    setShowGeneratedQuestions(false);
+                    setGeneratedQuestions([]);
+                    setGeneratorData({
+                      subject: '',
+                      topic: '',
+                      difficulty: 'medium',
+                      count: 1,
+                      questionType: 'MCQ'
+                    });
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleGenerateQuestions}
+                  disabled={generatorLoading || !generatorData.subject || !generatorData.topic}
+                  className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800"
+                >
+                  {generatorLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Generate Questions
+                    </>
+                  )}
+                </Button>
+              </div>
+              </div>
+              
+              {/* Generated Questions Preview */}
+              {showGeneratedQuestions && generatedQuestions.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-emerald-700 flex items-center">
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                      Generated Questions ({generatedQuestions.length})
+                    </h3>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setShowGeneratedQuestions(false);
+                        setGeneratedQuestions([]);
+                      }}
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Hide
+                    </Button>
+                  </div>
+                  
+                  <div className="max-h-96 overflow-y-auto space-y-3 pr-2">
+                    {generatedQuestions.map((question, index) => (
+                      <Card key={question.id || index} className="border-emerald-200 bg-emerald-50/50">
+                        <CardContent className="p-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <Badge className="bg-emerald-100 text-emerald-800">
+                                  #{index + 1}
+                                </Badge>
+                                <Badge variant="outline">{question.question_type}</Badge>
+                                <Badge variant="outline">{question.subject}</Badge>
+                              </div>
+                              <span className="text-sm text-emerald-600 font-medium">
+                                {question.marks || 1} marks
+                              </span>
+                            </div>
+                            
+                            <div className="space-y-3">
+                              <p className="font-medium text-slate-900">
+                                {question.question_text}
+                              </p>
+                              
+                              {question.options && question.options.length > 0 && (
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-slate-600">Select your answer:</span>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        const currentMode = quizMode;
+                                        setQuizMode(!currentMode);
+                                        if (currentMode) {
+                                          // Switching to practice mode - show all answers
+                                          toast.info('Practice mode: Answers now visible');
+                                        } else {
+                                          // Switching to quiz mode - hide answers
+                                          setQuizAnswers({});
+                                          setQuizResults({});
+                                          toast.info('Quiz mode: Test yourself!');
+                                        }
+                                      }}
+                                      className="text-xs"
+                                    >
+                                      {quizMode ? (
+                                        <><Eye className="h-3 w-3 mr-1" />Show Answers</>
+                                      ) : (
+                                        <><FileQuestion className="h-3 w-3 mr-1" />Quiz Mode</>
+                                      )}
+                                    </Button>
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-1 gap-2">
+                                    {question.options.map((option, optIndex) => {
+                                      const questionKey = `${question.id || index}-${optIndex}`;
+                                      const userAnswer = quizAnswers[question.id || index];
+                                      const isSelected = Array.isArray(userAnswer) 
+                                        ? userAnswer.includes(optIndex)
+                                        : userAnswer === optIndex;
+                                      const showResult = quizResults[question.id || index] !== undefined;
+                                      const isCorrect = option.is_correct;
+                                      
+                                      let buttonClass = 'p-3 rounded-lg border text-left transition-all hover:bg-slate-50 cursor-pointer ';
+                                      
+                                      if (!quizMode) {
+                                        // Practice mode - show correct answers
+                                        if (isCorrect) {
+                                          buttonClass += 'bg-green-100 border-green-300 text-green-800';
+                                        } else {
+                                          buttonClass += 'bg-slate-50 border-slate-200 text-slate-700';
+                                        }
+                                      } else if (showResult) {
+                                        // Quiz mode - show results after checking
+                                        if (isSelected && isCorrect) {
+                                          buttonClass += 'bg-green-100 border-green-300 text-green-800';
+                                        } else if (isSelected && !isCorrect) {
+                                          buttonClass += 'bg-red-100 border-red-300 text-red-800';
+                                        } else if (isCorrect) {
+                                          buttonClass += 'bg-green-50 border-green-200 text-green-700';
+                                        } else {
+                                          buttonClass += 'bg-slate-50 border-slate-200 text-slate-600';
+                                        }
+                                      } else {
+                                        // Quiz mode - interactive selection
+                                        if (isSelected) {
+                                          buttonClass += 'bg-blue-100 border-blue-300 text-blue-800';
+                                        } else {
+                                          buttonClass += 'bg-slate-50 border-slate-200 text-slate-700 hover:border-blue-200';
+                                        }
+                                      }
+                                      
+                                      return (
+                                        <div
+                                          key={optIndex}
+                                          className={buttonClass}
+                                          onClick={() => {
+                                            if (quizMode && !showResult) {
+                                              // Handle answer selection in quiz mode
+                                              if (question.question_type === 'MSQ') {
+                                                // Multiple selection for MSQ
+                                                const currentAnswers = quizAnswers[question.id || index] || [];
+                                                if (currentAnswers.includes(optIndex)) {
+                                                  setQuizAnswers(prev => ({
+                                                    ...prev,
+                                                    [question.id || index]: currentAnswers.filter(i => i !== optIndex)
+                                                  }));
+                                                } else {
+                                                  setQuizAnswers(prev => ({
+                                                    ...prev,
+                                                    [question.id || index]: [...currentAnswers, optIndex]
+                                                  }));
+                                                }
+                                              } else {
+                                                // Single selection for MCQ/NAT
+                                                setQuizAnswers(prev => ({
+                                                  ...prev,
+                                                  [question.id || index]: optIndex
+                                                }));
+                                              }
+                                            }
+                                          }}
+                                        >
+                                          <div className="flex items-center">
+                                            <span className="font-medium mr-3 text-sm">
+                                              {String.fromCharCode(65 + optIndex)}.
+                                            </span>
+                                            <span className="flex-1">{option.text}</span>
+                                            {!quizMode && isCorrect && (
+                                              <CheckCircle className="h-4 w-4 ml-2 text-green-600" />
+                                            )}
+                                            {quizMode && isSelected && !showResult && (
+                                              <Check className="h-4 w-4 ml-2 text-blue-600" />
+                                            )}
+                                            {showResult && isSelected && isCorrect && (
+                                              <CheckCircle className="h-4 w-4 ml-2 text-green-600" />
+                                            )}
+                                            {showResult && isSelected && !isCorrect && (
+                                              <X className="h-4 w-4 ml-2 text-red-600" />
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  
+                                  {quizMode && userAnswer !== undefined && !showResult && (
+                                    <div className="flex justify-center pt-2">
+                                      <Button
+                                        onClick={() => {
+                                          // Check answer and show results
+                                          const correctAnswers = question.options
+                                            .map((opt, idx) => opt.is_correct ? idx : null)
+                                            .filter(idx => idx !== null);
+                                          
+                                          let isCorrectAnswer = false;
+                                          if (question.question_type === 'MSQ') {
+                                            const userAnswerArray = Array.isArray(userAnswer) ? userAnswer : [userAnswer];
+                                            isCorrectAnswer = correctAnswers.length === userAnswerArray.length &&
+                                              correctAnswers.every(idx => userAnswerArray.includes(idx));
+                                          } else {
+                                            isCorrectAnswer = correctAnswers.includes(userAnswer);
+                                          }
+                                          
+                                          setQuizResults(prev => ({
+                                            ...prev,
+                                            [question.id || index]: isCorrectAnswer
+                                          }));
+                                          
+                                          if (isCorrectAnswer) {
+                                            toast.success('Correct answer! 🎉');
+                                          } else {
+                                            toast.error('Incorrect. Try again! 💪');
+                                          }
+                                        }}
+                                        size="sm"
+                                        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                                      >
+                                        <CheckCircle className="h-4 w-4 mr-1" />
+                                        Check Answer
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {!quizMode && question.correct_answer && (
+                                <div className="p-3 bg-green-100 rounded-lg border border-green-300">
+                                  <span className="text-sm font-medium text-green-800">
+                                    🎯 Answer: {question.correct_answer}
+                                  </span>
+                                </div>
+                              )}
+                              
+                              {question.explanation && (
+                                <div className="p-3 bg-blue-50 rounded border border-blue-200">
+                                  <p className="text-sm font-medium text-blue-800 mb-1">Explanation:</p>
+                                  <p className="text-sm text-blue-700">
+                                    {question.explanation.length > 200 
+                                      ? question.explanation.substring(0, 200) + '...' 
+                                      : question.explanation
+                                    }
+                                  </p>
+                                </div>
+                              )}
+                              
+                              <div className="flex items-center justify-between pt-2 border-t border-emerald-200">
+                                <div className="text-xs text-emerald-600">
+                                  Topic: {question.topic} • Difficulty: {question.difficulty}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  Generated by AI
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                  
+                  <div className="flex justify-between items-center pt-3 border-t border-emerald-200">
+                    <div className="text-sm text-slate-600">
+                      ✨ Questions saved to your collection
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          // Pre-populate exam form with generated questions data
+                          const subjects = [...new Set(generatedQuestions.map(q => q.subject))];
+                          const questionTypes = [...new Set(generatedQuestions.map(q => q.question_type))];
+                          
+                          setExamFormData(prev => ({
+                            ...prev,
+                            title: `AI Generated ${generatorData.subject} Exam`,
+                            description: `Exam based on AI-generated questions from ${generatorData.topic}`,
+                            total_questions: Math.min(generatedQuestions.length * 5, 50), // Scale up
+                            subjects: subjects,
+                            question_types: questionTypes,
+                            difficulty_level: generatorData.difficulty
+                          }));
+                          
+                          setShowCreateExamFromGenerated(true);
+                          toast.success('Exam template created from your generated questions!');
+                        }}
+                        className="bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        <BookOpen className="h-4 w-4 mr-1" />
+                        Create Exam
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setShowAiGenerator(false);
+                          setShowGeneratedQuestions(false);
+                          setGeneratedQuestions([]);
+                          setGeneratorData({
+                            subject: '',
+                            topic: '',
+                            difficulty: 'medium',
+                            count: 1,
+                            questionType: 'MCQ'
+                          });
+                        }}
+                        className="bg-emerald-600 text-white hover:bg-emerald-700"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Generate More
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Exam from Generated Questions Dialog */}
+        <Dialog open={showCreateExamFromGenerated} onOpenChange={setShowCreateExamFromGenerated}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Sparkles className="h-5 w-5 mr-2 text-purple-600" />
+                Create Exam from AI Questions
+              </DialogTitle>
+              <DialogDescription>
+                Create a formal exam using your AI-generated questions as a template
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+                <h4 className="font-medium text-purple-900 mb-2 flex items-center">
+                  <Bot className="h-4 w-4 mr-2" />
+                  AI-Generated Template Ready
+                </h4>
+                <p className="text-sm text-purple-700 mb-3">
+                  Based on your generated questions, we've created an exam template. The system will find similar questions from the database to create a full exam.
+                </p>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="font-medium text-purple-800">Subject:</span> {generatorData.subject}
+                  </div>
+                  <div>
+                    <span className="font-medium text-purple-800">Topic:</span> {generatorData.topic}
+                  </div>
+                  <div>
+                    <span className="font-medium text-purple-800">Generated:</span> {generatedQuestions.length} questions
+                  </div>
+                  <div>
+                    <span className="font-medium text-purple-800">Difficulty:</span> {generatorData.difficulty}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="text-center py-6">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <BookOpen className="h-8 w-8 text-blue-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  Ready to Create Full Exam?
+                </h3>
+                <p className="text-slate-600 text-sm mb-4">
+                  This will open the exam creation form with pre-filled data based on your AI-generated questions.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-3 pt-4 border-t">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowCreateExamFromGenerated(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => {
+                  setShowCreateExamFromGenerated(false);
+                  setShowCreateExamDialog(true);
+                }}
+                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+              >
+                <BookOpen className="h-4 w-4 mr-2" />
+                Create Full Exam
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Explanation Dialog */}
+        <Dialog open={showExplanationDialog} onOpenChange={setShowExplanationDialog}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Lightbulb className="h-5 w-5 mr-2 text-blue-600" />
+                Question Explanation
+                {selectedExplanation?.generated && (
+                  <Badge className="ml-2 bg-purple-100 text-purple-800">
+                    AI Generated
+                  </Badge>
+                )}
+              </DialogTitle>
+              <DialogDescription>
+                Detailed explanation for the selected question
+              </DialogDescription>
+            </DialogHeader>
+            {selectedExplanation && (
+              <div className="space-y-6">
+                {/* Question Details */}
+                <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg">
+                  <div className="flex items-center space-x-3 mb-3">
+                    <Badge variant="outline">{selectedExplanation.question.question_type}</Badge>
+                    <Badge variant="outline">{selectedExplanation.question.subject}</Badge>
+                    <span className="text-sm text-slate-500">{selectedExplanation.question.marks} marks</span>
+                  </div>
+                  <h4 className="font-medium text-slate-900 dark:text-slate-100 mb-2">
+                    {selectedExplanation.question.question_text}
+                  </h4>
+                  <div className="text-sm text-slate-600 dark:text-slate-400">
+                    <span>Topic: {selectedExplanation.question.topic}</span>
+                    <span className="mx-2">•</span>
+                    <span>Difficulty: {selectedExplanation.question.difficulty}</span>
+                  </div>
+                </div>
+
+                {/* Options (for MCQ/MSQ) */}
+                {selectedExplanation.question.options && selectedExplanation.question.options.length > 0 && (
+                  <div>
+                    <h5 className="font-medium text-slate-900 dark:text-slate-100 mb-3">Answer Options:</h5>
+                    <div className="space-y-2">
+                      {selectedExplanation.question.options.map((option, index) => (
+                        <div 
+                          key={index} 
+                          className={`p-3 rounded border ${
+                            option.is_correct 
+                              ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-200' 
+                              : 'bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center">
+                            <span className="font-medium mr-2">
+                              {String.fromCharCode(65 + index)}.
+                            </span>
+                            <span className="flex-1">{option.text}</span>
+                            {option.is_correct && (
+                              <CheckCircle className="h-4 w-4 ml-2 text-green-600" />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Correct Answer (for NAT) */}
+                {selectedExplanation.question.correct_answer && (
+                  <div>
+                    <h5 className="font-medium text-slate-900 dark:text-slate-100 mb-2">Correct Answer:</h5>
+                    <div className="p-3 bg-green-50 border border-green-200 rounded text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-200">
+                      <span className="font-medium">{selectedExplanation.question.correct_answer}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Explanation */}
+                <div>
+                  <h5 className="font-medium text-slate-900 dark:text-slate-100 mb-3 flex items-center">
+                    <Lightbulb className="h-4 w-4 mr-2 text-blue-600" />
+                    Explanation:
+                    {selectedExplanation.generated && (
+                      <span className="ml-2 text-sm text-purple-600">Generated by AI</span>
+                    )}
+                  </h5>
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded dark:bg-blue-900/20 dark:border-blue-800">
+                    <div className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300">
+                      <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
+                        {selectedExplanation.explanation}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t">
+                  <Button 
+                    onClick={() => {
+                      setShowExplanationDialog(false);
+                      setSelectedExplanation(null);
+                    }}
+                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk Share Dialog */}
+        <Dialog open={showBulkShareDialog} onOpenChange={setShowBulkShareDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Share2 className="h-5 w-5 mr-2 text-green-600" />
+                Bulk Share Questions
+              </DialogTitle>
+              <DialogDescription>
+                Share all your questions ({selectedQuestionsForBulkShare.length} questions) with multiple recipients
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="bulk-share-emails">Recipient Email Addresses</Label>
+                <Textarea
+                  id="bulk-share-emails"
+                  value={bulkShareEmails}
+                  onChange={(e) => setBulkShareEmails(e.target.value)}
+                  placeholder="Enter email addresses separated by commas...\ne.g., john@example.com, jane@example.com"
+                  rows={4}
+                  className="mt-2"
+                />
+                <p className="text-sm text-slate-500 mt-1">
+                  Separate multiple email addresses with commas
+                </p>
+              </div>
+              
+              <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                <h4 className="font-medium text-slate-900 dark:text-slate-100 mb-2">
+                  Questions to be shared:
+                </h4>
+                <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1">
+                  <p>• Total questions: {selectedQuestionsForBulkShare.length}</p>
+                  <p>• Subjects: {[...new Set(selectedQuestionsForBulkShare.map(q => q.subject))].join(', ')}</p>
+                  <p>• Question types: {[...new Set(selectedQuestionsForBulkShare.map(q => q.question_type))].join(', ')}</p>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowBulkShareDialog(false);
+                    setBulkShareEmails('');
+                    setSelectedQuestionsForBulkShare([]);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleBulkShareSubmit}
+                  disabled={!bulkShareEmails.trim() || selectedQuestionsForBulkShare.length === 0}
+                  className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
+                >
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share All Questions
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
 };
 
 // Questions List Component
-const QuestionsList = ({ questions, loading, onShare, onView, onDelete, showShareButton, showDeleteButton = false, getQuestionBadgeColor, getQuestionLabel }) => {
+const QuestionsList = ({ questions, loading, onShare, onView, onDelete, onGenerateExplanation, onEnhanceQuestion, onViewExplanation, showShareButton, showDeleteButton = false, showAiFeatures = false, aiStatus, getQuestionBadgeColor, getQuestionLabel }) => {
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -2834,7 +4118,44 @@ const QuestionsList = ({ questions, loading, onShare, onView, onDelete, showShar
                   <span>Difficulty: {question.difficulty}</span>
                 </div>
               </div>
-              <div className="flex space-x-2 ml-4">
+              <div className="flex space-x-1 ml-4">
+                {showAiFeatures && aiStatus?.available && (
+                  <>
+                    {(!question.explanation || question.explanation.trim() === '') && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onGenerateExplanation && onGenerateExplanation(question.id)}
+                        title="Generate AI Explanation"
+                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      >
+                        <Sparkles className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {question.user_relation === 'own' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onEnhanceQuestion && onEnhanceQuestion(question.id)}
+                        title="Enhance Question with AI"
+                        className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                      >
+                        <Wand2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </>
+                )}
+                {question.explanation && question.explanation.trim() && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onViewExplanation && onViewExplanation(question)}
+                    title="View Explanation"
+                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                  >
+                    <Lightbulb className="h-4 w-4" />
+                  </Button>
+                )}
                 {showShareButton && question.user_relation === 'own' && (
                   <Button
                     variant="outline"

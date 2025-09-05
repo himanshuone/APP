@@ -5,11 +5,33 @@
   <img src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
+  <img src="https://img.shields.io/badge/Google%20AI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google AI" />
 </div>
 
 <br />
 
-A **comprehensive GATE (Graduate Aptitude Test in Engineering)** exam simulation platform featuring a modern React frontend with **pure black dark mode** and a robust Node.js/Express backend with MongoDB integration.
+A **comprehensive GATE (Graduate Aptitude Test in Engineering)** exam simulation platform featuring a modern React frontend with **pure black dark mode**, AI-powered features, and a robust Node.js/Express backend with MongoDB integration. Now with **mobile device support** and **intelligent duplicate prevention**!
+
+## 🚀 Latest Updates (v2.0)
+
+### ⭐ **NEW: AI-Powered Features**
+- 🤖 **AI Question Generation**: Generate high-quality questions using Google's Gemini AI
+- 💡 **AI Explanations**: Automatic explanation generation for existing questions
+- 🎯 **AI Question Enhancement**: Improve question quality with AI suggestions
+- 👨‍🏫 **AI Tutor**: Interactive AI assistant for concept clarification
+- 📊 **Performance Analysis**: AI-driven insights on exam performance
+
+### 🛡️ **NEW: Smart Duplicate Prevention**
+- 🔍 **Question Deduplication**: Advanced detection prevents duplicate questions
+- ✅ **Exam Integrity**: Ensures no repeated questions in exams
+- 🎯 **Smart Filtering**: Case-insensitive matching with similarity detection
+- 📋 **Detailed Feedback**: Shows existing duplicates with creator information
+
+### 📱 **NEW: Mobile & Network Access**
+- 📲 **Phone Compatibility**: Access from any device on your network
+- 🌐 **Network Ready**: Automatic IP detection for cross-device access
+- 🚀 **Quick Setup**: One-command startup for both servers
+- ⚡ **Modern Standards**: Updated MongoDB connection & latest packages
 
 ## ✨ Features
 

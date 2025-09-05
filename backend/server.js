@@ -11,9 +11,68 @@ const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const morgan = require('morgan');
 const { body, validationResult } = require('express-validator');
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
+
+// Load Gemini service after environment variables
+const geminiService = require('./services/geminiService');
+
+// Email service configuration
+const createEmailTransporter = () => {
+  if (!process.env.EMAIL_USER || process.env.EMAIL_USER === 'your-email@gmail.com') {
+    console.log('⚠️  Email service not configured - emails will be simulated');
+    return null;
+  }
+  
+  return nodemailer.createTransporter({
+    service: process.env.EMAIL_SERVICE || 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+};
+
+const emailTransporter = createEmailTransporter();
+
+// Email templates
+const createQuestionShareEmail = (senderName, questionTitle, questionLink, viewLink) => {
+  return {
+    subject: `${senderName} shared a GATE exam question with you`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
+        <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <h2 style="color: #059669; margin-bottom: 20px;">📚 Question Shared with You!</h2>
+          
+          <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+            <strong>${senderName}</strong> has shared a GATE exam question with you from the GATE Exam Simulator.
+          </p>
+          
+          <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; border-left: 4px solid #059669; margin: 20px 0;">
+            <h3 style="color: #065f46; margin: 0 0 10px 0;">Question Preview:</h3>
+            <p style="color: #047857; font-weight: 500; margin: 0;">${questionTitle}</p>
+          </div>
+          
+          <div style="margin: 30px 0;">
+            <a href="${viewLink}" style="display: inline-block; background: #059669; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 500; margin-right: 10px;">🔍 View Question</a>
+            <a href="${questionLink}" style="display: inline-block; background: #0f766e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 500;">📝 Practice on Platform</a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+          
+          <p style="color: #6b7280; font-size: 14px; margin: 0;">
+            📱 <strong>GATE Exam Simulator</strong> - Prepare for your GATE exam with AI-powered questions and practice tests.<br>
+            This email was sent because someone shared a question with your email address.
+          </p>
+        </div>
+      </div>
+    `,
+    text: `${senderName} shared a GATE exam question with you!\n\nQuestion: ${questionTitle}\n\nView the question: ${viewLink}\n\nPractice on platform: ${questionLink}\n\nGATE Exam Simulator - Prepare for your GATE exam with AI-powered questions.`
+  };
+};
 
 const app = express();
 const PORT = process.env.PORT || 8001;
@@ -39,20 +98,37 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// MongoDB connection
+// MongoDB connection with modern configuration
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017/gate_exam';
 const DB_NAME = process.env.DB_NAME || 'gate_exam';
 
+// Enhanced MongoDB connection
 mongoose.connect(MONGO_URL, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  dbName: DB_NAME
+  dbName: DB_NAME,
+  serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  bufferCommands: false // Disable buffering if connection is down
 });
 
 const db = mongoose.connection;
-db.on('error', console.error.bind(console, 'MongoDB connection error:'));
+
+// Enhanced error handling
+db.on('error', (error) => {
+  console.error('MongoDB connection error:', error);
+});
+
 db.once('open', () => {
-  console.log('Connected to MongoDB');
+  console.log('✅ Connected to MongoDB successfully');
+  console.log(`📊 Database: ${DB_NAME}`);
+  console.log(`🔗 Connection: ${MONGO_URL}`);
+});
+
+db.on('disconnected', () => {
+  console.warn('⚠️  MongoDB disconnected');
+});
+
+db.on('reconnected', () => {
+  console.log('🔄 MongoDB reconnected');
 });
 
 // Enums
@@ -104,6 +180,9 @@ const questionSchema = new mongoose.Schema({
   options: [questionOptionSchema],
   correct_answer: mongoose.Schema.Types.Mixed,
   explanation: String,
+  shared_with_emails: { type: [String], default: [] },
+  share_token: { type: String, default: null }, // For public link sharing
+  share_token_expires: { type: Date, default: null },
   created_at: { type: Date, default: Date.now },
   created_by: { type: String, required: true }
 });
@@ -115,6 +194,18 @@ const examConfigSchema = new mongoose.Schema({
   duration_minutes: { type: Number, default: 180 },
   total_questions: { type: Number, required: true },
   subjects: [String],
+  question_types: { type: [String], default: ['MCQ', 'MSQ', 'NAT'] },
+  difficulty_level: { type: String, default: 'medium' },
+  negative_marking: { type: Boolean, default: false },
+  mcq_marks: { type: Number, default: 1 },
+  mcq_negative: { type: Number, default: 0.33 },
+  msq_marks: { type: Number, default: 2 },
+  msq_negative: { type: Number, default: 0 },
+  nat_marks: { type: Number, default: 2 },
+  nat_negative: { type: Number, default: 0 },
+  is_published: { type: Boolean, default: true },
+  status: { type: String, default: 'active' },
+  attempt_count: { type: Number, default: 0 },
   randomize_questions: { type: Boolean, default: true },
   created_by: { type: String, required: true },
   created_at: { type: Date, default: Date.now }
@@ -308,6 +399,28 @@ app.post('/api/admin/questions', authenticate, requireAdmin, [
   body('topic').notEmpty().withMessage('Topic is required')
 ], handleValidationErrors, async (req, res) => {
   try {
+    const { question_text, subject, topic } = req.body;
+    
+    // Check for duplicate questions
+    const duplicateQuestion = await Question.findOne({
+      question_text: { $regex: new RegExp(`^${question_text.trim()}$`, 'i') },
+      subject: { $regex: new RegExp(`^${subject.trim()}$`, 'i') },
+      topic: { $regex: new RegExp(`^${topic.trim()}$`, 'i') }
+    });
+    
+    if (duplicateQuestion) {
+      return res.status(400).json({ 
+        detail: 'A similar question already exists with the same text, subject, and topic',
+        existing_question: {
+          id: duplicateQuestion.id,
+          question_text: duplicateQuestion.question_text,
+          subject: duplicateQuestion.subject,
+          topic: duplicateQuestion.topic,
+          created_by: duplicateQuestion.created_by
+        }
+      });
+    }
+    
     const questionData = { ...req.body, created_by: req.user.id };
     const question = new Question(questionData);
     await question.save();
@@ -374,6 +487,8 @@ app.get('/api/questions', authenticate, async (req, res) => {
       // Determine relationship to user
       if (questionObj.created_by === req.user.id) {
         questionObj.user_relation = 'own';
+      } else if (Array.isArray(questionObj.shared_with_emails) && questionObj.shared_with_emails.includes(req.user.email)) {
+        questionObj.user_relation = 'shared';
       } else if (req.user.role === 'admin') {
         questionObj.user_relation = 'admin';
       } else {
@@ -382,7 +497,7 @@ app.get('/api/questions', authenticate, async (req, res) => {
       
       // Add creator name (simplified)
       questionObj.creator_name = questionObj.created_by === req.user.id ? req.user.full_name : 'Admin';
-      questionObj.shared_count = 0; // Placeholder
+      questionObj.shared_count = Array.isArray(questionObj.shared_with_emails) ? questionObj.shared_with_emails.length : 0;
       
       return questionObj;
     });
@@ -391,6 +506,226 @@ app.get('/api/questions', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get questions error:', error);
     res.status(500).json({ detail: 'Failed to fetch questions' });
+  }
+});
+
+// User Question Management Routes
+app.post('/api/questions', authenticate, [
+  body('question_text').notEmpty().withMessage('Question text is required'),
+  body('question_type').isIn(Object.values(QuestionType)).withMessage('Invalid question type'),
+  body('subject').notEmpty().withMessage('Subject is required'),
+  body('topic').notEmpty().withMessage('Topic is required')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { question_text, subject, topic } = req.body;
+    
+    // Check for duplicate questions (case-insensitive)
+    const duplicateQuestion = await Question.findOne({
+      question_text: { $regex: new RegExp(`^${question_text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      subject: { $regex: new RegExp(`^${subject.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      topic: { $regex: new RegExp(`^${topic.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
+    
+    if (duplicateQuestion) {
+      return res.status(400).json({ 
+        detail: 'A similar question already exists with the same text, subject, and topic',
+        existing_question: {
+          id: duplicateQuestion.id,
+          question_text: duplicateQuestion.question_text,
+          subject: duplicateQuestion.subject,
+          topic: duplicateQuestion.topic,
+          created_by: duplicateQuestion.created_by,
+          creator_name: duplicateQuestion.created_by === req.user.id ? 'You' : 'Another user'
+        }
+      });
+    }
+    
+    const questionData = { ...req.body, created_by: req.user.id };
+    const question = new Question(questionData);
+    await question.save();
+
+    const questionResponse = question.toObject();
+    delete questionResponse._id;
+    delete questionResponse.__v;
+
+    res.status(201).json(questionResponse);
+  } catch (error) {
+    console.error('Create user question error:', error);
+    res.status(500).json({ detail: 'Failed to create question' });
+  }
+});
+
+app.post('/api/questions/:questionId/share', authenticate, async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    const { recipient_emails, share_method = 'email' } = req.body; // 'email' or 'link'
+
+    // Find question and verify permission
+    const question = await Question.findOne({ id: questionId });
+    if (!question) {
+      return res.status(404).json({ detail: 'Question not found' });
+    }
+
+    if (question.created_by !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ detail: 'Permission denied' });
+    }
+
+    let shareLink = null;
+    let emailsSent = 0;
+    
+    // Generate or reuse share token for link sharing
+    if (share_method === 'link' || recipient_emails?.length > 0) {
+      if (!question.share_token || question.share_token_expires < new Date()) {
+        question.share_token = crypto.randomBytes(32).toString('hex');
+        question.share_token_expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+      }
+      
+      shareLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/shared/${question.share_token}`;
+    }
+
+    // Handle email sharing
+    if (share_method === 'email' && recipient_emails?.length > 0) {
+      // Validate emails
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const cleanEmails = recipient_emails
+        .map(e => String(e).trim().toLowerCase())
+        .filter(e => emailRegex.test(e));
+
+      if (cleanEmails.length === 0) {
+        return res.status(400).json({ detail: 'No valid recipient emails provided' });
+      }
+
+      // Update shared emails list
+      const current = new Set(question.shared_with_emails || []);
+      cleanEmails.forEach(e => current.add(e));
+      question.shared_with_emails = Array.from(current);
+
+      // Send emails if email service is configured
+      if (emailTransporter) {
+        const questionTitle = question.question_text.length > 100 
+          ? question.question_text.substring(0, 100) + '...' 
+          : question.question_text;
+          
+        const platformLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard`;
+        
+        for (const email of cleanEmails) {
+          try {
+            const emailContent = createQuestionShareEmail(
+              req.user.full_name,
+              questionTitle,
+              platformLink,
+              shareLink
+            );
+            
+            await emailTransporter.sendMail({
+              from: process.env.EMAIL_FROM || 'GATE Exam Simulator <noreply@example.com>',
+              to: email,
+              ...emailContent
+            });
+            
+            emailsSent++;
+          } catch (emailError) {
+            console.error(`Failed to send email to ${email}:`, emailError);
+          }
+        }
+      } else {
+        console.log('📧 Email simulation - Would send to:', cleanEmails);
+        emailsSent = cleanEmails.length; // Simulate success for development
+      }
+    }
+
+    await question.save();
+
+    const response = {
+      success: true,
+      message: share_method === 'link' 
+        ? 'Share link generated successfully'
+        : `Question shared with ${emailsSent} recipient(s)`,
+      share_method,
+    };
+
+    if (shareLink) {
+      response.share_link = shareLink;
+      response.expires_at = question.share_token_expires;
+    }
+    
+    if (share_method === 'email') {
+      response.emails_sent = emailsSent;
+      response.shared_with_emails = question.shared_with_emails;
+    }
+
+    res.json(response);
+  } catch (error) {
+    console.error('Share question error:', error);
+    res.status(500).json({ detail: 'Failed to share question' });
+  }
+});
+
+// Public endpoint for viewing shared questions
+app.get('/api/shared/:shareToken', async (req, res) => {
+  try {
+    const { shareToken } = req.params;
+    
+    // Find question by share token
+    const question = await Question.findOne({
+      share_token: shareToken,
+      share_token_expires: { $gt: new Date() } // Token must not be expired
+    });
+    
+    if (!question) {
+      return res.status(404).json({ detail: 'Shared question not found or link has expired' });
+    }
+    
+    // Return question data without sensitive information
+    const questionData = {
+      id: question.id,
+      question_text: question.question_text,
+      question_type: question.question_type,
+      subject: question.subject,
+      topic: question.topic,
+      difficulty: question.difficulty || 'medium',
+      marks: question.marks,
+      negative_marks: question.negative_marks,
+      options: question.options,
+      explanation: question.explanation,
+      created_at: question.created_at,
+      creator_name: 'Anonymous', // Don't expose creator details publicly
+      is_shared: true,
+      expires_at: question.share_token_expires
+    };
+    
+    res.json(questionData);
+  } catch (error) {
+    console.error('Get shared question error:', error);
+    res.status(500).json({ detail: 'Failed to fetch shared question' });
+  }
+});
+
+app.delete('/api/questions/:questionId', authenticate, async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    
+    // Find the question first to check ownership
+    const question = await Question.findOne({ id: questionId });
+    if (!question) {
+      return res.status(404).json({ detail: 'Question not found' });
+    }
+    
+    // Check if user owns the question or is admin
+    if (question.created_by !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ detail: 'Permission denied' });
+    }
+    
+    const result = await Question.deleteOne({ id: questionId });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ detail: 'Question not found' });
+    }
+
+    res.json({ message: 'Question deleted successfully' });
+  } catch (error) {
+    console.error('Delete question error:', error);
+    res.status(500).json({ detail: 'Failed to delete question' });
   }
 });
 
@@ -716,6 +1051,42 @@ app.get('/api/admin/exams', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
+app.delete('/api/admin/exams/:examId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { examId } = req.params;
+    
+    // Check if exam configuration exists
+    const examConfig = await ExamConfig.findOne({ id: examId });
+    if (!examConfig) {
+      return res.status(404).json({ detail: 'Exam configuration not found' });
+    }
+    
+    // Check for active exam sessions
+    const activeSessions = await ExamSession.find({ 
+      exam_config_id: examId, 
+      submitted: false 
+    });
+    
+    if (activeSessions.length > 0) {
+      return res.status(400).json({ 
+        detail: `Cannot delete exam configuration. ${activeSessions.length} active session(s) exist.` 
+      });
+    }
+    
+    // Delete the exam configuration
+    const result = await ExamConfig.deleteOne({ id: examId });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ detail: 'Exam configuration not found' });
+    }
+    
+    res.json({ message: 'Exam configuration deleted successfully' });
+  } catch (error) {
+    console.error('Delete exam error:', error);
+    res.status(500).json({ detail: 'Failed to delete exam configuration' });
+  }
+});
+
 // Student Exam Routes
 app.get('/api/exams', authenticate, async (req, res) => {
   try {
@@ -724,6 +1095,136 @@ app.get('/api/exams', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get available exams error:', error);
     res.status(500).json({ detail: 'Failed to fetch available exams' });
+  }
+});
+
+// User Exam Creation Route
+app.post('/api/exams', authenticate, [
+  body('title').notEmpty().withMessage('Exam title is required'),
+  body('description').notEmpty().withMessage('Exam description is required'),
+  body('duration').isInt({ min: 30 }).withMessage('Duration must be at least 30 minutes'),
+  body('total_questions').isInt({ min: 1 }).withMessage('Total questions must be a positive integer'),
+  body('subjects').isArray({ min: 1 }).withMessage('At least one subject is required'),
+  body('question_types').isArray({ min: 1 }).withMessage('At least one question type is required')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      duration,
+      total_questions,
+      subjects,
+      question_types,
+      difficulty_level,
+      negative_marking,
+      mcq_marks,
+      mcq_negative,
+      msq_marks,
+      msq_negative,
+      nat_marks,
+      nat_negative
+    } = req.body;
+
+    // Check if there are enough questions for the requested exam
+    const availableQuestions = await Question.find({
+      subject: { $in: subjects },
+      question_type: { $in: question_types }
+    });
+
+    // Remove duplicate questions based on question text (case-insensitive) for validation
+    const uniqueQuestions = [];
+    const seenQuestionTexts = new Set();
+    
+    for (const question of availableQuestions) {
+      const normalizedText = question.question_text.trim().toLowerCase();
+      if (!seenQuestionTexts.has(normalizedText)) {
+        seenQuestionTexts.add(normalizedText);
+        uniqueQuestions.push(question);
+      }
+    }
+
+    if (uniqueQuestions.length < total_questions) {
+      return res.status(400).json({
+        detail: `Not enough unique questions available. Found ${uniqueQuestions.length} unique questions but need ${total_questions}. Available: ${availableQuestions.length} total questions (${availableQuestions.length - uniqueQuestions.length} duplicates removed)`
+      });
+    }
+
+    // Create exam configuration
+    const examData = {
+      name: title, // Map title to name for compatibility
+      description,
+      duration_minutes: duration,
+      total_questions,
+      subjects,
+      question_types,
+      difficulty_level: difficulty_level || 'medium',
+      negative_marking: negative_marking || false,
+      mcq_marks: mcq_marks || 1,
+      mcq_negative: mcq_negative || 0.33,
+      msq_marks: msq_marks || 2,
+      msq_negative: msq_negative || 0,
+      nat_marks: nat_marks || 2,
+      nat_negative: nat_negative || 0,
+      created_by: req.user.id,
+      randomize_questions: true
+    };
+
+    const exam = new ExamConfig(examData);
+    await exam.save();
+
+    const examResponse = exam.toObject();
+    delete examResponse._id;
+    delete examResponse.__v;
+
+    res.status(201).json({
+      success: true,
+      exam: examResponse,
+      message: 'Exam created successfully'
+    });
+  } catch (error) {
+    console.error('Create user exam error:', error);
+    res.status(500).json({ detail: 'Failed to create exam' });
+  }
+});
+
+app.delete('/api/exams/:examId', authenticate, async (req, res) => {
+  try {
+    const { examId } = req.params;
+    
+    // Find the exam configuration first to check ownership
+    const examConfig = await ExamConfig.findOne({ id: examId });
+    if (!examConfig) {
+      return res.status(404).json({ detail: 'Exam configuration not found' });
+    }
+    
+    // Check if user owns the exam configuration or is admin
+    if (examConfig.created_by !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ detail: 'Permission denied. You can only delete your own exam configurations.' });
+    }
+    
+    // Check for active exam sessions
+    const activeSessions = await ExamSession.find({ 
+      exam_config_id: examId, 
+      submitted: false 
+    });
+    
+    if (activeSessions.length > 0) {
+      return res.status(400).json({ 
+        detail: `Cannot delete exam configuration. ${activeSessions.length} active session(s) exist.` 
+      });
+    }
+    
+    // Delete the exam configuration
+    const result = await ExamConfig.deleteOne({ id: examId });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ detail: 'Exam configuration not found' });
+    }
+    
+    res.json({ message: 'Exam configuration deleted successfully' });
+  } catch (error) {
+    console.error('Delete user exam error:', error);
+    res.status(500).json({ detail: 'Failed to delete exam configuration' });
   }
 });
 
@@ -751,28 +1252,49 @@ app.post('/api/exam/start/:examConfigId', authenticate, async (req, res) => {
       return res.json(sessionResponse);
     }
 
-    // Get questions based on subjects
+    // Get unique questions based on subjects (prevent duplicates by question text)
     const allQuestions = await Question.find({ 
       subject: { $in: examConfig.subjects } 
     });
 
-    if (allQuestions.length < examConfig.total_questions) {
+    // Remove duplicate questions based on question text (case-insensitive)
+    const uniqueQuestions = [];
+    const seenQuestionTexts = new Set();
+    
+    for (const question of allQuestions) {
+      const normalizedText = question.question_text.trim().toLowerCase();
+      if (!seenQuestionTexts.has(normalizedText)) {
+        seenQuestionTexts.add(normalizedText);
+        uniqueQuestions.push(question);
+      }
+    }
+
+    console.log(`Found ${allQuestions.length} total questions, ${uniqueQuestions.length} unique questions`);
+
+    if (uniqueQuestions.length < examConfig.total_questions) {
       return res.status(400).json({ 
-        detail: 'Not enough questions available for this exam' 
+        detail: `Not enough unique questions available for this exam. Found ${uniqueQuestions.length} unique questions but need ${examConfig.total_questions}. Please reduce the number of questions or add more unique questions.`
       });
     }
 
     // Select and randomize questions if needed
-    let selectedQuestions = allQuestions;
+    let selectedQuestions = uniqueQuestions;
     if (examConfig.randomize_questions) {
-      selectedQuestions = allQuestions
+      selectedQuestions = uniqueQuestions
         .sort(() => Math.random() - 0.5)
         .slice(0, examConfig.total_questions);
     } else {
-      selectedQuestions = allQuestions.slice(0, examConfig.total_questions);
+      selectedQuestions = uniqueQuestions.slice(0, examConfig.total_questions);
     }
 
     const questionIds = selectedQuestions.map(q => q.id);
+    
+    // Double-check for duplicate IDs (should not happen, but safety check)
+    const uniqueIds = [...new Set(questionIds)];
+    if (uniqueIds.length !== questionIds.length) {
+      console.error('Duplicate question IDs detected in exam:', questionIds);
+      return res.status(500).json({ detail: 'Internal error: duplicate questions detected' });
+    }
 
     // Initialize question status
     const questionStatus = new Map();
@@ -1416,6 +1938,340 @@ app.get('/api/admin/analytics/charts', authenticate, requireAdmin, async (req, r
   }
 });
 
+// ============= AI ENDPOINTS =============
+
+// Generate explanation for a question
+app.post('/api/ai/generate-explanation/:questionId', authenticate, async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    
+    const question = await Question.findOne({ id: questionId });
+    if (!question) {
+      return res.status(404).json({ detail: 'Question not found' });
+    }
+
+    if (!geminiService || !geminiService.isAvailable()) {
+      return res.status(503).json({ detail: 'AI service is currently unavailable' });
+    }
+
+    const result = await geminiService.generateExplanation(question);
+    
+    if (result.success) {
+      // Update question with generated explanation
+      question.explanation = result.explanation;
+      await question.save();
+      
+      res.json({
+        success: true,
+        explanation: result.explanation,
+        message: 'Explanation generated successfully'
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        error: result.error,
+        message: 'Failed to generate explanation'
+      });
+    }
+  } catch (error) {
+    console.error('Generate explanation error:', error);
+    res.status(500).json({ detail: 'Failed to generate explanation' });
+  }
+});
+
+// Categorize question using AI
+app.post('/api/ai/categorize-question', authenticate, async (req, res) => {
+  try {
+    const { question_text } = req.body;
+    
+    if (!question_text) {
+      return res.status(400).json({ detail: 'Question text is required' });
+    }
+
+    if (!geminiService || !geminiService.isAvailable()) {
+      return res.status(503).json({ detail: 'AI service is currently unavailable' });
+    }
+
+    const result = await geminiService.categorizeQuestion(question_text);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        categorization: result.categorization
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Categorize question error:', error);
+    res.status(500).json({ detail: 'Failed to categorize question' });
+  }
+});
+
+// Enhance question quality
+app.post('/api/ai/enhance-question/:questionId', authenticate, async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    
+    const question = await Question.findOne({ id: questionId });
+    if (!question) {
+      return res.status(404).json({ detail: 'Question not found' });
+    }
+
+    // Check if user owns the question or is admin
+    if (question.created_by !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ detail: 'Permission denied' });
+    }
+
+    if (!geminiService || !geminiService.isAvailable()) {
+      return res.status(503).json({ detail: 'AI service is currently unavailable' });
+    }
+
+    const result = await geminiService.enhanceQuestion(question);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        enhancement: result.enhancement
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Enhance question error:', error);
+    res.status(500).json({ detail: 'Failed to enhance question' });
+  }
+});
+
+// AI Tutor - Answer student doubts
+app.post('/api/ai/ask-tutor', authenticate, async (req, res) => {
+  try {
+    const { question, context } = req.body;
+    
+    if (!question) {
+      return res.status(400).json({ detail: 'Question is required' });
+    }
+
+    if (!geminiService || !geminiService.isAvailable()) {
+      return res.status(503).json({ detail: 'AI Tutor is currently unavailable' });
+    }
+
+    const result = await geminiService.answerDoubt(question, context);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        answer: result.answer
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('AI Tutor error:', error);
+    res.status(500).json({ detail: 'Failed to get answer from AI Tutor' });
+  }
+});
+
+// Generate questions using AI
+app.post('/api/ai/generate-questions', authenticate, async (req, res) => {
+  try {
+    const { subject, topic, difficulty = 'medium', count = 1, question_type = 'MCQ' } = req.body;
+    
+    if (!subject || !topic) {
+      return res.status(400).json({ detail: 'Subject and topic are required' });
+    }
+
+    if (!geminiService || !geminiService.isAvailable()) {
+      return res.status(503).json({ detail: 'AI service is currently unavailable' });
+    }
+
+    const result = await geminiService.generateQuestions(subject, topic, difficulty, count, question_type);
+    
+    if (result.success) {
+      // Optionally save generated questions to database
+      const savedQuestions = [];
+      for (const questionData of result.questions) {
+        const question = new Question({
+          ...questionData,
+          created_by: req.user.id
+        });
+        const savedQuestion = await question.save();
+        savedQuestions.push(savedQuestion);
+      }
+
+      res.json({
+        success: true,
+        questions: savedQuestions,
+        count: savedQuestions.length
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Generate questions error:', error);
+    res.status(500).json({ detail: 'Failed to generate questions' });
+  }
+});
+
+// Analyze user performance
+app.post('/api/ai/analyze-performance', authenticate, async (req, res) => {
+  try {
+    // Get user's recent exam results
+    const examResults = await ExamResult.find({ user_id: req.user.id })
+      .sort({ submitted_at: -1 })
+      .limit(10)
+      .lean();
+
+    if (examResults.length === 0) {
+      return res.status(400).json({ detail: 'No exam data available for analysis' });
+    }
+
+    if (!geminiService || !geminiService.isAvailable()) {
+      return res.status(503).json({ detail: 'AI service is currently unavailable' });
+    }
+
+    // Prepare performance data for AI analysis
+    const performanceData = {
+      total_exams: examResults.length,
+      average_score: examResults.reduce((sum, result) => sum + result.percentage, 0) / examResults.length,
+      best_score: Math.max(...examResults.map(r => r.percentage)),
+      worst_score: Math.min(...examResults.map(r => r.percentage)),
+      subject_scores: {},
+      recent_trend: examResults.slice(0, 5).map(r => ({ 
+        score: r.percentage, 
+        date: r.submitted_at,
+        attempted: r.attempted,
+        correct: r.correct
+      }))
+    };
+
+    // Calculate subject-wise performance
+    examResults.forEach(result => {
+      if (result.subject_wise_score) {
+        for (const [subject, score] of Object.entries(result.subject_wise_score)) {
+          if (!performanceData.subject_scores[subject]) {
+            performanceData.subject_scores[subject] = [];
+          }
+          performanceData.subject_scores[subject].push(score);
+        }
+      }
+    });
+
+    const result = await geminiService.analyzePerformance(performanceData);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        analysis: result.analysis,
+        performance_data: performanceData
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Analyze performance error:', error);
+    res.status(500).json({ detail: 'Failed to analyze performance' });
+  }
+});
+
+// Check AI service status
+app.get('/api/ai/status', authenticate, (req, res) => {
+  const isAvailable = geminiService && geminiService.isAvailable();
+  res.json({
+    available: isAvailable,
+    features: {
+      explanation_generation: isAvailable,
+      question_categorization: isAvailable,
+      question_enhancement: isAvailable,
+      ai_tutor: isAvailable,
+      question_generation: isAvailable,
+      performance_analysis: isAvailable
+    }
+  });
+});
+
+// Bulk generate explanations for questions without explanations
+app.post('/api/ai/bulk-generate-explanations', authenticate, requireAdmin, async (req, res) => {
+  try {
+    if (!geminiService || !geminiService.isAvailable()) {
+      return res.status(503).json({ detail: 'AI service is currently unavailable' });
+    }
+
+    // Find questions without explanations
+    const questionsWithoutExplanations = await Question.find({
+      $or: [
+        { explanation: { $exists: false } },
+        { explanation: '' },
+        { explanation: null }
+      ]
+    }).limit(10); // Limit to 10 to avoid rate limits
+
+    const results = [];
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const question of questionsWithoutExplanations) {
+      try {
+        const result = await geminiService.generateExplanation(question);
+        
+        if (result.success) {
+          question.explanation = result.explanation;
+          await question.save();
+          successCount++;
+          results.push({
+            question_id: question.id,
+            success: true,
+            explanation_length: result.explanation.length
+          });
+        } else {
+          failureCount++;
+          results.push({
+            question_id: question.id,
+            success: false,
+            error: result.error
+          });
+        }
+        
+        // Add delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        failureCount++;
+        results.push({
+          question_id: question.id,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      processed: questionsWithoutExplanations.length,
+      successful: successCount,
+      failed: failureCount,
+      results
+    });
+  } catch (error) {
+    console.error('Bulk generate explanations error:', error);
+    res.status(500).json({ detail: 'Failed to bulk generate explanations' });
+  }
+});
+
 // Error handling middleware
 app.use((error, req, res, next) => {
   console.error('Unhandled error:', error);
@@ -1432,9 +2288,34 @@ app.use('*', (req, res) => {
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 GATE Exam Simulator API running on port ${PORT}`);
+  console.log('\n' + '='.repeat(60));
+  console.log('🚀 GATE Exam Simulator API Server Started!');
+  console.log('='.repeat(60));
+  console.log(`📡 Port: ${PORT}`);
   console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🗄️  Database: ${MONGO_URL}`);
+  console.log(`🔒 CORS Origins: ${process.env.CORS_ORIGINS || '*'}`);
+  console.log('\n📍 Server Access URLs:');
+  console.log(`   Local:    http://localhost:${PORT}`);
+  console.log(`   Network:  http://0.0.0.0:${PORT}`);
+  console.log(`   Phone:    http://192.168.1.5:${PORT}`);
+  console.log('\n📋 API Status:');
+  console.log(`   Health:   http://localhost:${PORT}/api/health`);
+  console.log(`   AI Status: http://localhost:${PORT}/api/ai/status`);
+  console.log('\n✨ Ready to accept connections!');
+  console.log('='.repeat(60) + '\n');
+});
+
+// Add health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    version: '2.0.0',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
 });
 
 // Graceful shutdown
