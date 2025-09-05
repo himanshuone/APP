@@ -549,7 +549,7 @@ const Dashboard = () => {
                         <span className="font-medium dark:text-white">{exam.subjects.join(', ')}</span>
                       </div>
                       <Button 
-                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 dark:from-green-500 dark:to-emerald-500 dark:hover:from-green-400 dark:hover:to-emerald-400 transition-all duration-300 hover:shadow-lg dark:hover:shadow-green-500/20"
+                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
                         onClick={() => startExam(exam.id)}
                       >
                         <Play className="h-4 w-4 mr-2" />
@@ -573,7 +573,7 @@ const Dashboard = () => {
                 const latestAttempt = history.sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))[0];
                 
                 return (
-                  <Card key={exam.id} className="hover:shadow-lg transition-all duration-300 border-2 border-blue-200 dark:border-blue-500/30 dark:bg-gradient-to-br dark:from-gray-800/50 dark:to-gray-900/50 dark:hover:border-blue-400/50 dark:hover:shadow-blue-500/20">
+                  <Card key={exam.id} className="hover:shadow-lg transition-shadow dark:bg-gray-800 dark:border-gray-700">
                     <CardHeader>
                       <CardTitle className="flex items-center justify-between">
                         {exam.name}
@@ -1011,9 +1011,9 @@ const StudentQuestionBank = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-indigo-100 dark:from-gray-900 dark:via-purple-900 dark:to-indigo-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-purple-700/50 shadow-sm">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
@@ -1656,7 +1656,7 @@ const AdminPanel = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-red-100 dark:from-gray-900 dark:via-orange-900 dark:to-red-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
